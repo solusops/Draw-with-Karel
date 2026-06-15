@@ -64,7 +64,12 @@ class KarelDrawingApp:
         self.drag_start = None
         self.is_dragging = False
         self.is_playing = False
-        self.sim_tick_count = 0  # Christmas blinking counter
+        
+        # Simulation scheduler states
+        self.loop_speeds = {}        # head_cell -> speed_level (0=1x, 1=2x, 2=3x)
+        self.loop_accumulators = {}  # head_cell -> accumulated_ms
+        self.loop_steps_count = {}   # head_cell -> current_step_tick (for blinking)
+        self.speed_buttons = {}      # head_cell -> (x1, y1, x2, y2)
         
         # GUI frames setup
         self.setup_ui()
@@ -269,6 +274,8 @@ class KarelDrawingApp:
     # --- Grid Logic & Rendering ---
     def redraw(self):
         self.canvas.delete("all")
+        self.speed_buttons.clear()
+        
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         
@@ -280,20 +287,57 @@ class KarelDrawingApp:
         
         theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
         
-        # 1. Draw Grid Lines
+        # 1. Cycle detection & highlight loops with dull yellow
+        cycles, node_to_head, cycle_heads = self.detect_loops_and_chains()
+        highlight_color = "#3F3715" if self.dark_mode else "#FEF08A"
+        
+        cycle_cells = set()
+        for cycle in cycles:
+            cycle_cells.update(cycle)
+            
+        for (col, row) in cycle_cells:
+            if col < self.grid_size and row < self.grid_size:
+                x1 = col * cell_w
+                y1 = row * cell_h
+                x2 = x1 + cell_w
+                y2 = y1 + cell_h
+                self.canvas.create_rectangle(x1, y1, x2, y2, fill=highlight_color, outline="")
+        
+        # 2. Draw Grid Lines
         for i in range(self.grid_size + 1):
             self.canvas.create_line(i * cell_w, 0, i * cell_w, h, fill=theme["grid_line"], width=1)
             self.canvas.create_line(0, i * cell_h, w, i * cell_h, fill=theme["grid_line"], width=1)
             
-        # 2. Draw Karels
+        # 3. Draw Karels
         S = min(cell_w, cell_h)
         for (col, row), data in self.karels.items():
             if col < self.grid_size and row < self.grid_size:
                 cx = col * cell_w + cell_w / 2
                 cy = row * cell_h + cell_h / 2
-                self.draw_karel(cx, cy, S, data["direction"], COLOR_PALETTE[data["color"]], col, row)
                 
-        # 3. Update Labels
+                # Check if this robot is moving (associated with a cycle head)
+                parent_head = node_to_head.get((col, row))
+                self.draw_karel(cx, cy, S, data["direction"], COLOR_PALETTE[data["color"]], col, row, parent_head)
+                
+        # 4. Draw Speed Buttons on top left of the head cell for each active loop
+        for head in cycle_heads:
+            col, row = head
+            if col < self.grid_size and row < self.grid_size:
+                x1 = col * cell_w + 4
+                y1 = row * cell_h + 4
+                x2 = x1 + 22
+                y2 = y1 + 22
+                
+                self.canvas.create_oval(x1, y1, x2, y2, fill="#E5E7EB" if not self.dark_mode else "#374151", outline="#9CA3AF", width=1, tags="speed_btn")
+                
+                speed = self.loop_speeds.get(head, 0)
+                speed_text = "1x" if speed == 0 else "2x" if speed == 1 else "3x"
+                self.canvas.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=speed_text, font=("Segoe UI", 8, "bold"), fill="#1F2937" if not self.dark_mode else "#F9FAFB", tags="speed_btn")
+                
+                # Bounding box for click triggers
+                self.speed_buttons[head] = (x1, y1, x2, y2)
+                
+        # 5. Update Sidebar Stats Labels
         self.grid_size_lbl.config(text=f"Grid Size: {self.grid_size} x {self.grid_size}")
         self.karel_count_lbl.config(text=f"Total Karels: {len(self.karels)}")
 
@@ -308,15 +352,16 @@ class KarelDrawingApp:
             return -y, x
         return x, y
 
-    def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0):
+    def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0, parent_head=None):
         theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
         outline_color = theme["karel_outline"]
         
         line_width = max(2, int(S * 0.06))
         
-        # Screen Christmas light flashing effect (toggles colors Red and Green)
-        if self.is_playing:
-            state = (col + row + self.sim_tick_count) % 2
+        # Screen Christmas light flashing effect (only blinks if robot is in an active cycle)
+        if self.is_playing and parent_head is not None:
+            # Sync blinking with this loop's steps counter
+            state = (col + row + self.loop_steps_count.get(parent_head, 0)) % 2
             screen_fill = "#EF4444" if state == 0 else "#10B981"
         else:
             screen_fill = "#FFFFFF" if not self.dark_mode else "#1F2937"
@@ -363,6 +408,17 @@ class KarelDrawingApp:
         return col, row
 
     def handle_click(self, event):
+        # 1. Check if click falls within any speed buttons
+        for head, bbox in self.speed_buttons.items():
+            x1, y1, x2, y2 = bbox
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2:
+                # Cycle speed setting: 1x (0) -> 2x (1) -> 3x (2)
+                curr_speed = self.loop_speeds.get(head, 0)
+                self.loop_speeds[head] = (curr_speed + 1) % 3
+                self.redraw()
+                return
+                
+        # 2. Otherwise run double click checks
         if self.click_timer is not None:
             self.root.after_cancel(self.click_timer)
             self.click_timer = None
@@ -466,15 +522,14 @@ class KarelDrawingApp:
             self.animate_tick()
         else:
             self.play_btn.config(text="▶ Play Simulation", fg="#10B981")
-        self.apply_theme() # Refresh color settings
+        self.apply_theme()
 
     def animate_tick(self):
         if not self.is_playing:
             return
             
-        self.sim_tick_count = (self.sim_tick_count + 1) % 2  # Alternate blinking state
         self.run_simulation_step()
-        self.root.after(500, self.animate_tick)
+        self.root.after(50, self.animate_tick)  # Faster scheduling loop (50ms increments)
 
     def get_dir_delta(self, direction):
         if direction == "East": return 1, 0
@@ -483,11 +538,12 @@ class KarelDrawingApp:
         elif direction == "South": return 0, 1
         return 0, 0
 
-    def run_simulation_step(self):
-        # 1. Cycle detection (find loops >= 4)
-        moving = set()
+    def detect_loops_and_chains(self):
+        cycles = []
+        node_to_head = {}
         visited_global = set()
         
+        # 1. Cycle detection (find loops >= 4)
         for start in list(self.karels.keys()):
             if start in visited_global:
                 continue
@@ -500,8 +556,7 @@ class KarelDrawingApp:
                     cycle_start_idx = visited_local[curr]
                     cycle = path[cycle_start_idx:]
                     if len(cycle) >= 4:
-                        for node in cycle:
-                            moving.add(node)
+                        cycles.append(set(cycle))
                     break
                 if curr in visited_global:
                     break
@@ -509,7 +564,6 @@ class KarelDrawingApp:
                 visited_local[curr] = len(path)
                 path.append(curr)
                 
-                # Next node (with grid boundary wrapping)
                 col, row = curr
                 data = self.karels[curr]
                 dx, dy = self.get_dir_delta(data["direction"])
@@ -518,7 +572,16 @@ class KarelDrawingApp:
             for node in path:
                 visited_global.add(node)
                 
-        # 2. Propagation (head-to-back chain)
+        # 2. Sort out head cell for each cycle (highest, leftest)
+        cycle_heads = set()
+        for cycle in cycles:
+            head = min(cycle, key=lambda p: (p[1], p[0]))
+            cycle_heads.add(head)
+            for node in cycle:
+                node_to_head[node] = head
+                
+        # 3. Propagation along matching direction head-to-back links
+        moving = set(node_to_head.keys())
         changed = True
         while changed:
             changed = False
@@ -534,20 +597,49 @@ class KarelDrawingApp:
                 if front_pos in moving:
                     front_data = self.karels[front_pos]
                     if front_data["direction"] == direction:
+                        node_to_head[pos] = node_to_head[front_pos]
                         moving.add(pos)
                         changed = True
                         
-        # 3. Apply steps simultaneously
-        if not moving:
-            self.redraw() # Still redraw to animate blinking lights
+        return cycles, node_to_head, cycle_heads
+
+    def run_simulation_step(self):
+        cycles, node_to_head, cycle_heads = self.detect_loops_and_chains()
+        
+        # Clean up stale loop states
+        self.loop_speeds = {h: self.loop_speeds[h] for h in self.loop_speeds if h in cycle_heads}
+        self.loop_accumulators = {h: self.loop_accumulators[h] for h in self.loop_accumulators if h in cycle_heads}
+        self.loop_steps_count = {h: self.loop_steps_count[h] for h in self.loop_steps_count if h in cycle_heads}
+        
+        robots_to_move = set()
+        
+        # Check loops independently using their specific speeds
+        for head in cycle_heads:
+            self.loop_accumulators[head] = self.loop_accumulators.get(head, 0) + 50
+            speed = self.loop_speeds.get(head, 0)
+            threshold = 500 if speed == 0 else 250 if speed == 1 else 100
+            
+            if self.loop_accumulators[head] >= threshold:
+                self.loop_accumulators[head] -= threshold
+                
+                # Advance blink state tick
+                self.loop_steps_count[head] = (self.loop_steps_count.get(head, 0) + 1) % 2
+                
+                # Add all associated loop and chain cells to move set
+                for pos, parent_head in node_to_head.items():
+                    if parent_head == head:
+                        robots_to_move.add(pos)
+                        
+        if not robots_to_move:
+            self.redraw() # Still redraw for blink updates
             return
             
         new_karels = {}
         for pos, data in self.karels.items():
-            if pos not in moving:
+            if pos not in robots_to_move:
                 new_karels[pos] = data
                 
-        for pos in moving:
+        for pos in robots_to_move:
             col, row = pos
             data = self.karels[pos]
             dx, dy = self.get_dir_delta(data["direction"])
@@ -593,7 +685,12 @@ class KarelStaticViewer:
         self.grid_size = grid_size
         self.karels = {{(k["x"], k["y"]): {{"direction": k["direction"], "color": k["color"]}} for k in karels}}
         self.is_playing = False
-        self.sim_tick_count = 0
+        
+        # Simulation loop variables
+        self.loop_speeds = {{}}
+        self.loop_accumulators = {{}}
+        self.loop_steps_count = {{}}
+        self.speed_buttons = {{}}
         
         # Palettes for rendering
         self.color_palette = {{
@@ -647,7 +744,17 @@ class KarelStaticViewer:
         self.info_lbl.pack(side=tk.RIGHT, padx=15, pady=5)
         
         self.canvas.bind("<Configure>", lambda e: self.draw())
+        self.canvas.bind("<Button-1>", self.handle_click)
         
+    def handle_click(self, event):
+        for head, bbox in self.speed_buttons.items():
+            x1, y1, x2, y2 = bbox
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2:
+                curr_speed = self.loop_speeds.get(head, 0)
+                self.loop_speeds[head] = (curr_speed + 1) % 3
+                self.draw()
+                return
+
     def toggle_play(self):
         self.is_playing = not self.is_playing
         if self.is_playing:
@@ -659,9 +766,8 @@ class KarelStaticViewer:
     def animate_tick(self):
         if not self.is_playing:
             return
-        self.sim_tick_count = (self.sim_tick_count + 1) % 2
         self.run_simulation_step()
-        self.root.after(500, self.animate_tick)
+        self.root.after(50, self.animate_tick)
         
     def get_dir_delta(self, direction):
         if direction == "East": return 1, 0
@@ -670,9 +776,11 @@ class KarelStaticViewer:
         elif direction == "South": return 0, 1
         return 0, 0
         
-    def run_simulation_step(self):
-        moving = set()
+    def detect_loops_and_chains(self):
+        cycles = []
+        node_to_head = {{}}
         visited_global = set()
+        
         for start in list(self.karels.keys()):
             if start in visited_global:
                 continue
@@ -684,8 +792,7 @@ class KarelStaticViewer:
                     cycle_start_idx = visited_local[curr]
                     cycle = path[cycle_start_idx:]
                     if len(cycle) >= 4:
-                        for node in cycle:
-                            moving.add(node)
+                        cycles.append(set(cycle))
                     break
                 if curr in visited_global:
                     break
@@ -698,6 +805,14 @@ class KarelStaticViewer:
             for node in path:
                 visited_global.add(node)
                 
+        cycle_heads = set()
+        for cycle in cycles:
+            head = min(cycle, key=lambda p: (p[1], p[0]))
+            cycle_heads.add(head)
+            for node in cycle:
+                node_to_head[node] = head
+                
+        moving = set(node_to_head.keys())
         changed = True
         while changed:
             changed = False
@@ -711,18 +826,40 @@ class KarelStaticViewer:
                 if front_pos in moving:
                     front_data = self.karels[front_pos]
                     if front_data["direction"] == direction:
+                        node_to_head[pos] = node_to_head[front_pos]
                         moving.add(pos)
                         changed = True
                         
-        if not moving:
+        return cycles, node_to_head, cycle_heads
+
+    def run_simulation_step(self):
+        cycles, node_to_head, cycle_heads = self.detect_loops_and_chains()
+        
+        self.loop_speeds = {{h: self.loop_speeds[h] for h in self.loop_speeds if h in cycle_heads}}
+        self.loop_accumulators = {{h: self.loop_accumulators[h] for h in self.loop_accumulators if h in cycle_heads}}
+        self.loop_steps_count = {{h: self.loop_steps_count[h] for h in self.loop_steps_count if h in cycle_heads}}
+        
+        robots_to_move = set()
+        for head in cycle_heads:
+            self.loop_accumulators[head] = self.loop_accumulators.get(head, 0) + 50
+            speed = self.loop_speeds.get(head, 0)
+            threshold = 500 if speed == 0 else 250 if speed == 1 else 100
+            if self.loop_accumulators[head] >= threshold:
+                self.loop_accumulators[head] -= threshold
+                self.loop_steps_count[head] = (self.loop_steps_count.get(head, 0) + 1) % 2
+                for pos, parent_head in node_to_head.items():
+                    if parent_head == head:
+                        robots_to_move.add(pos)
+                        
+        if not robots_to_move:
             self.draw()
             return
             
         new_karels = {{}}
         for pos, data in self.karels.items():
-            if pos not in moving:
+            if pos not in robots_to_move:
                 new_karels[pos] = data
-        for pos in moving:
+        for pos in robots_to_move:
             col, row = pos
             data = self.karels[pos]
             dx, dy = self.get_dir_delta(data["direction"])
@@ -735,6 +872,8 @@ class KarelStaticViewer:
         
     def draw(self):
         self.canvas.delete("all")
+        self.speed_buttons.clear()
+        
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         if w <= 1 or h <= 1:
@@ -743,6 +882,16 @@ class KarelStaticViewer:
         cell_w = w / self.grid_size
         cell_h = h / self.grid_size
         
+        # Draw Loop Highlights (dull yellow)
+        cycles, node_to_head, cycle_heads = self.detect_loops_and_chains()
+        highlight_color = "#FEF08A"
+        cycle_cells = set()
+        for cycle in cycles:
+            cycle_cells.update(cycle)
+        for (col, row) in cycle_cells:
+            if col < self.grid_size and row < self.grid_size:
+                self.canvas.create_rectangle(col*cell_w, row*cell_h, (col+1)*cell_w, (row+1)*cell_h, fill=highlight_color, outline="")
+                
         # Draw grid
         for i in range(self.grid_size + 1):
             self.canvas.create_line(i * cell_w, 0, i * cell_w, h, fill="#E5E7EB", width=1)
@@ -754,7 +903,22 @@ class KarelStaticViewer:
             if col < self.grid_size and row < self.grid_size:
                 cx = col * cell_w + cell_w / 2
                 cy = row * cell_h + cell_h / 2
-                self.draw_karel(cx, cy, S, data["direction"], self.color_palette.get(data["color"], "#EF4444"), col, row)
+                parent_head = node_to_head.get((col, row))
+                self.draw_karel(cx, cy, S, data["direction"], self.color_palette.get(data["color"], "#EF4444"), col, row, parent_head)
+                
+        # Draw Speed Buttons
+        for head in cycle_heads:
+            col, row = head
+            if col < self.grid_size and row < self.grid_size:
+                x1 = col * cell_w + 4
+                y1 = row * cell_h + 4
+                x2 = x1 + 22
+                y2 = y1 + 22
+                self.canvas.create_oval(x1, y1, x2, y2, fill="#E5E7EB", outline="#9CA3AF", width=1, tags="speed_btn")
+                speed = self.loop_speeds.get(head, 0)
+                speed_text = "1x" if speed == 0 else "2x" if speed == 1 else "3x"
+                self.canvas.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=speed_text, font=("Segoe UI", 8, "bold"), fill="#1F2937", tags="speed_btn")
+                self.speed_buttons[head] = (x1, y1, x2, y2)
                 
     def rotate_point(self, x, y, direction):
         if direction == "East":
@@ -767,12 +931,12 @@ class KarelStaticViewer:
             return -y, x
         return x, y
         
-    def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0):
+    def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0, parent_head=None):
         outline_color = "#1F2937"
         line_width = max(2, int(S * 0.06))
         
-        if self.is_playing:
-            state = (col + row + self.sim_tick_count) % 2
+        if self.is_playing and parent_head is not None:
+            state = (col + row + self.loop_steps_count.get(parent_head, 0)) % 2
             screen_fill = "#EF4444" if state == 0 else "#10B981"
         else:
             screen_fill = "#FFFFFF"
