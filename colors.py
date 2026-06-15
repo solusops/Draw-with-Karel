@@ -9,6 +9,7 @@ COLOR_PALETTE = {
     "Pink": "#EC4899",
     "Orange": "#F97316",
     "Purple": "#8B5CF6",
+    "Black": "#000000",
 }
 
 # The color used to highlight cells that are part of a loop

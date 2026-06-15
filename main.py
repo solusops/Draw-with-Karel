@@ -23,7 +23,14 @@ class KarelApp:
         self.anim_state = AnimationState()
         
         # Initialize the User Interface (UI)
-        self.ui = KarelUI(root, self.world, self.anim_state)
+        self.ui = KarelUI(self.root, self.world, self.anim_state)
+        
+        self.pan_x = 0
+        self.pan_y = 0
+        self.is_panning = False
+        self.long_press_timer = None
+        self.start_click_x = 0
+        self.start_click_y = 0
         
         # Bind events
         self.bind_events()
@@ -36,9 +43,11 @@ class KarelApp:
     def bind_events(self):
         # Mouse clicks
         self.last_placed_direction = "East"
-        self.ui.canvas.bind("<Button-1>", self.on_left_click)
-        self.ui.canvas.bind("<B1-Motion>", self.on_mouse_drag)
+        self.ui.canvas.bind("<ButtonPress-1>", self.on_left_click_press)
+        self.ui.canvas.bind("<B1-Motion>", self.on_left_click_drag)
+        self.ui.canvas.bind("<ButtonRelease-1>", self.on_left_click_release)
         self.ui.canvas.bind("<Button-3>", self.on_right_click)
+        self.ui.canvas.bind("<B3-Motion>", self.on_right_click_drag)
         
         # Mouse wheel (scrolling)
         # Windows/Mac
@@ -62,55 +71,88 @@ class KarelApp:
             return None, None
             
         cell_size = min(width, height) / self.world.grid_size
-        col = int(event.x // cell_size)
-        row = int(event.y // cell_size)
+        col = int((event.x - self.pan_x) // cell_size)
+        row = int((event.y - self.pan_y) // cell_size)
         
-        cols = int(width / cell_size)
-        rows = int(height / cell_size)
+        return col, row
+
+    def start_pan_mode(self):
+        self.is_panning = True
+        self.long_press_timer = None
+        self.ui.canvas.config(cursor="fleur")
         
-        # Only return valid coordinates
-        if 0 <= col < cols and 0 <= row < rows:
-            return col, row
-        return None, None
-
-    def on_left_click(self, event):
-        """When the user clicks the left mouse button."""
-        col, row = self.get_cell_from_click(event)
-        if col is None:
-            return
-            
-        # First, check if they clicked a speed button!
-        if self.anim_state.is_playing:
-            cycles, node_to_head, cycle_heads = detect_loops_and_chains(self.world)
-            for head in cycle_heads:
-                if col == head[0] and row == head[1]:
-                    # They clicked the head of a loop! Change speed!
-                    toggle_loop_speed(self.anim_state, head)
-                    self.update_canvas()
-                    return
-
-        karel = self.world.get_karel(col, row)
-        if karel is None:
-            # Place a new Karel
-            self.world.add_karel(col, row, self.last_placed_direction, self.ui.current_color)
-            self.world.karels[(col, row)]["shape"] = self.ui.current_shape
+    def on_left_click_press(self, event):
+        self.start_click_x = event.x
+        self.start_click_y = event.y
+        self.is_panning = False
+        
+        # Start a 300ms timer for long press
+        if self.long_press_timer is not None:
+            self.root.after_cancel(self.long_press_timer)
+        self.long_press_timer = self.root.after(300, self.start_pan_mode)
+        
+    def on_left_click_drag(self, event):
+        if self.is_panning:
+            # Pan the screen
+            dx = event.x - self.start_click_x
+            dy = event.y - self.start_click_y
+            self.pan_x += dx
+            self.pan_y += dy
+            self.start_click_x = event.x
+            self.start_click_y = event.y
+            self.update_canvas()
         else:
-            # Turn the existing Karel
-            karel["direction"] = get_next_direction(karel["direction"])
-            self.last_placed_direction = karel["direction"]
-            
-        self.update_canvas()
+            # If we move more than 5 pixels before the timer fires, it's a draw drag!
+            if abs(event.x - self.start_click_x) > 5 or abs(event.y - self.start_click_y) > 5:
+                if self.long_press_timer is not None:
+                    self.root.after_cancel(self.long_press_timer)
+                    self.long_press_timer = None
+                    
+                col, row = self.get_cell_from_click(event)
+                if col is None: return
+                if self.world.get_karel(col, row) is None:
+                    self.world.add_karel(col, row, self.last_placed_direction, self.ui.current_color)
+                    self.world.karels[(col, row)]["shape"] = self.ui.current_shape
+                    self.update_canvas()
+                    
+    def on_left_click_release(self, event):
+        self.ui.canvas.config(cursor="")
         
-    def on_mouse_drag(self, event):
-        """When the user holds left click and drags the mouse."""
-        col, row = self.get_cell_from_click(event)
-        if col is None:
-            return
+        if self.long_press_timer is not None:
+            # We released before the long press triggered! This was a normal click.
+            self.root.after_cancel(self.long_press_timer)
+            self.long_press_timer = None
             
-        # Only place if empty
-        if self.world.get_karel(col, row) is None:
-            self.world.add_karel(col, row, self.last_placed_direction, self.ui.current_color)
-            self.world.karels[(col, row)]["shape"] = self.ui.current_shape
+            # Normal click logic (place or rotate Karel)
+            col, row = self.get_cell_from_click(event)
+            if col is None: return
+                
+            # Speed buttons
+            if self.anim_state.is_playing:
+                cycles, node_to_head, cycle_heads = detect_loops_and_chains(self.world)
+                for head in cycle_heads:
+                    if col == head[0] and row == head[1]:
+                        toggle_loop_speed(self.anim_state, head)
+                        self.update_canvas()
+                        return
+            
+            karel = self.world.get_karel(col, row)
+            if karel is None:
+                self.world.add_karel(col, row, self.last_placed_direction, self.ui.current_color)
+                self.world.karels[(col, row)]["shape"] = self.ui.current_shape
+            else:
+                karel["direction"] = get_next_direction(karel["direction"])
+                self.last_placed_direction = karel["direction"]
+                
+            self.update_canvas()
+            
+        self.is_panning = False
+        
+    def on_right_click_drag(self, event):
+        """Erases Karels when dragging with right click."""
+        col, row = self.get_cell_from_click(event)
+        if col is not None and self.world.get_karel(col, row) is not None:
+            self.world.remove_karel(col, row)
             self.update_canvas()
 
     def on_right_click(self, event):
@@ -188,49 +230,41 @@ class KarelApp:
         
         if self.anim_state.is_playing:
             self.ui.btn_play.config(text="Pause", bg="#F59E0B")
-            
-            width = self.ui.canvas.winfo_width()
-            height = self.ui.canvas.winfo_height()
-            if width > 1 and height > 1:
-                cell_size = min(width, height) / self.world.grid_size
-                cols = int(width / cell_size) + 1
-                rows = int(height / cell_size) + 1
-                self.world.sync_logical_grid(cols, rows)
+            # We don't need to sync logical grid bounds anymore! The world is infinite.
         else:
             self.ui.btn_play.config(text="Play", bg="#10B981")
             
         self.update_canvas()
 
     def update_canvas(self):
-        """Redraws the entire screen."""
+        self.ui.canvas.delete("all")
+        
         width = self.ui.canvas.winfo_width()
         height = self.ui.canvas.winfo_height()
         
         if width <= 1 or height <= 1:
-            # Tkinter hasn't finished loading yet, try again soon
-            self.root.after(100, self.update_canvas)
             return
             
         cell_size = min(width, height) / self.world.grid_size
         
-        # Clear the canvas FIRST
-        self.ui.canvas.delete("all")
+        # 1. Draw the background grid
+        self.ui.draw_grid(width, height, cell_size, self.pan_x, self.pan_y)
         
-        # Find loops!
-        cycles, node_to_head, cycle_heads = detect_loops_and_chains(self.world)
-        
-        # 1. Draw the yellow highlight behind Karels in a loop
-        self.ui.draw_loop_highlights(cell_size, cycles, node_to_head, cycle_heads)
-        
-        # 2. Draw the background grid (drawn ON TOP of yellow highlights)
-        self.ui.draw_grid(width, height, cell_size)
-        
-        # 3. Draw the Karels themselves
-        self.ui.draw_karels(cell_size, node_to_head, cycle_heads)
-        
-        # 4. If playing, draw the little speed buttons on the loop heads
+        # Calculate loops ONLY if we are playing
+        cycles, node_to_head, cycle_heads = [], {}, []
         if self.anim_state.is_playing:
-            self.ui.draw_speed_buttons(cell_size, cycle_heads)
+            cycles, node_to_head, cycle_heads = detect_loops_and_chains(self.world)
+            
+        # 2. Draw yellow highlight blocks for active loops
+        if self.anim_state.is_playing:
+            self.ui.draw_loop_highlights(cell_size, cycles, node_to_head, cycle_heads, self.pan_x, self.pan_y)
+            
+        # 3. Draw all Karels
+        self.ui.draw_karels(cell_size, node_to_head, cycle_heads, self.pan_x, self.pan_y)
+        
+        # 4. Draw speed control buttons on the loop heads
+        if self.anim_state.is_playing:
+            self.ui.draw_speed_buttons(cell_size, cycle_heads, self.pan_x, self.pan_y)
 
     def animate_loop(self):
         """This function calls itself 60 times a second to run the game."""

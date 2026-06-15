@@ -11,7 +11,8 @@ def find_next_karel_in_line(world, col, row, dx, dy):
     curr_col = col + dx
     curr_row = row + dy
     
-    while 0 <= curr_col < world.logical_grid_cols and 0 <= curr_row < world.logical_grid_rows:
+    # We use a massive boundary to effectively make the world infinite
+    while -10000 <= curr_col <= 10000 and -10000 <= curr_row <= 10000:
         # Check if there is a Karel at this position
         if world.get_karel(curr_col, curr_row) is not None:
             return (curr_col, curr_row)
@@ -77,8 +78,17 @@ def detect_loops_and_chains(world):
             
             # Find the next Karel in the line of sight
             karel_data = world.get_karel(curr[0], curr[1])
-            dx, dy = get_dir_delta(karel_data["direction"])
-            curr = find_next_karel_in_line(world, curr[0], curr[1], dx, dy)
+            direction = karel_data["direction"]
+            if direction not in ["East", "South", "West", "North"]:
+                break
+                
+            dx, dy = get_dir_delta(direction)
+            next_pos = find_next_karel_in_line(world, curr[0], curr[1], dx, dy)
+            if next_pos is not None:
+                next_data = world.get_karel(next_pos[0], next_pos[1])
+                if karel_data.get("shape", "Classic Karel") != next_data.get("shape", "Classic Karel"):
+                    next_pos = None # Shapes don't match, break connection
+            curr = next_pos
             
         # Mark all the nodes we just checked as visited
         for node in path:
@@ -96,13 +106,17 @@ def detect_loops_and_chains(world):
                 continue
                 
             karel_data = world.get_karel(pos[0], pos[1])
-            dx, dy = get_dir_delta(karel_data["direction"])
+            direction = karel_data["direction"]
+            if direction not in ["East", "South", "West", "North"]:
+                continue
+                
+            dx, dy = get_dir_delta(direction)
             front_pos = find_next_karel_in_line(world, pos[0], pos[1], dx, dy)
             
             if front_pos is not None and front_pos in moving:
                 front_data = world.get_karel(front_pos[0], front_pos[1])
-                # Only connect if they are facing the same direction
-                if front_data["direction"] == karel_data["direction"]:
+                # Only connect if they are facing the same direction AND have the same shape
+                if front_data["direction"] == karel_data["direction"] and karel_data.get("shape", "Classic Karel") == front_data.get("shape", "Classic Karel"):
                     node_to_head[pos] = node_to_head[front_pos]
                     moving.append(pos)
                     changed = True

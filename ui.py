@@ -235,24 +235,28 @@ class KarelUI:
         else:
             self.status_lbl.config(text=message, fg="red")
 
-    def draw_grid(self, width, height, cell_size):
+    def draw_grid(self, width, height, cell_size, pan_x=0, pan_y=0):
         """Draws the grid lines."""
-        cols = int(width / cell_size) + 1
-        rows = int(height / cell_size) + 1
+        start_col = int(-pan_x / cell_size)
+        end_col = start_col + int(width / cell_size) + 2
         
-        for col in range(cols):
-            x = col * cell_size
+        for col in range(start_col, end_col):
+            x = col * cell_size + pan_x
             self.canvas.create_line(x, 0, x, height, fill=GRID_LINE_COLOR, width=1)
-        for row in range(rows):
-            y = row * cell_size
+            
+        start_row = int(-pan_y / cell_size)
+        end_row = start_row + int(height / cell_size) + 2
+        
+        for row in range(start_row, end_row):
+            y = row * cell_size + pan_y
             self.canvas.create_line(0, y, width, y, fill=GRID_LINE_COLOR, width=1)
 
-    def draw_loop_highlights(self, cell_size, cycles, node_to_head, cycle_heads):
+    def draw_loop_highlights(self, cell_size, cycles, node_to_head, cycle_heads, pan_x=0, pan_y=0):
         """Draws yellow boxes behind Karels that are part of a loop."""
         for pos in list(self.world.karels.keys()):
             if pos in node_to_head:
-                x0 = pos[0] * cell_size
-                y0 = pos[1] * cell_size
+                x0 = pos[0] * cell_size + pan_x
+                y0 = pos[1] * cell_size + pan_y
                 x1 = x0 + cell_size
                 y1 = y0 + cell_size
                 
@@ -264,7 +268,7 @@ class KarelUI:
                 
                 self.canvas.create_rectangle(x0, y0, x1, y1, fill=bg_color, outline="")
                 
-    def draw_karels(self, cell_size, node_to_head, cycle_heads):
+    def draw_karels(self, cell_size, node_to_head, cycle_heads, pan_x=0, pan_y=0):
         """Draws all the Karels, including the smooth sliding animation."""
         from character import get_dir_delta
         
@@ -289,17 +293,17 @@ class KarelUI:
                 draw_row = row + (dy * progress)
 
             # Center of the cell
-            cx = (draw_col + 0.5) * cell_size
-            cy = (draw_row + 0.5) * cell_size
+            cx = (draw_col + 0.5) * cell_size + pan_x
+            cy = (draw_row + 0.5) * cell_size + pan_y
             
             # Draw the chosen shape!
             draw_character_by_name(self.canvas, cx, cy, cell_size, direction, color_hex, shape_name)
             
-    def draw_speed_buttons(self, cell_size, cycle_heads):
+    def draw_speed_buttons(self, cell_size, cycle_heads, pan_x=0, pan_y=0):
         """Draws tiny buttons on the head of each loop to change speed."""
         for head in cycle_heads:
-            x0 = head[0] * cell_size
-            y0 = head[1] * cell_size
+            x0 = head[0] * cell_size + pan_x
+            y0 = head[1] * cell_size + pan_y
             
             speed = self.anim_state.loop_speeds.get(head, 0)
             text = ">" if speed == 0 else ">>" if speed == 1 else "!"
