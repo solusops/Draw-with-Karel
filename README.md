@@ -1,5 +1,7 @@
 # Draw with Karel
 
+![Draw with Karel](logo.svg)
+
 Welcome to **Draw with Karel**, final project submission for **Code-in-Place**! 
 This project is modular so that new programmers can easily read, understand, and tweak the code.
 
