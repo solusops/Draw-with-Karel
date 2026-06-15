@@ -3,40 +3,6 @@ from tkinter import filedialog, messagebox
 import ast
 import re
 
-# Theme colors
-THEMES = {
-    "light": {
-        "bg": "#FFFFFF",
-        "canvas_bg": "#FAF9F6",
-        "grid_line": "#E5E7EB",
-        "sidebar_bg": "#F3F4F6",
-        "text": "#1F2937",
-        "text_sec": "#4B5563",
-        "accent": "#3B82F6",
-        "border": "#D1D5DB",
-        "button_bg": "#E5E7EB",
-        "button_fg": "#1F2937",
-        "active_button_bg": "#D1D5DB",
-        "karel_outline": "#1F2937",
-        "karel_head": "#D1D5DB"
-    },
-    "dark": {
-        "bg": "#111827",
-        "canvas_bg": "#1F2937",
-        "grid_line": "#374151",
-        "sidebar_bg": "#111827",
-        "text": "#F9FAFB",
-        "text_sec": "#9CA3AF",
-        "accent": "#60A5FA",
-        "border": "#4B5563",
-        "button_bg": "#374151",
-        "button_fg": "#F9FAFB",
-        "active_button_bg": "#4B5563",
-        "karel_outline": "#F9FAFB",
-        "karel_head": "#4B5563"
-    }
-}
-
 COLOR_PALETTE = {
     "Red": "#EF4444",
     "Blue": "#3B82F6",
@@ -60,7 +26,6 @@ class KarelDrawingApp:
         self.logical_grid_size = 10
         self.karels = {}  # (x, y) -> {"direction": str, "color": str}
         self.selected_color = "Red"
-        self.dark_mode = False
         self.click_timer = None
         self.drag_start = None
         self.is_dragging = False
@@ -71,10 +36,10 @@ class KarelDrawingApp:
         self.loop_accumulators = {}  # head_cell -> accumulated_ms
         self.loop_steps_count = {}   # head_cell -> current_step_tick (for blinking)
         self.speed_buttons = {}      # head_cell -> (x1, y1, x2, y2)
+        self._head_to_ordered = {}   # head_cell -> ordered cycle list
         
         # GUI frames setup
         self.setup_ui()
-        self.apply_theme()
         
         # Bind events
         self.canvas.bind("<Configure>", lambda e: self.redraw())
@@ -90,18 +55,18 @@ class KarelDrawingApp:
         
     def setup_ui(self):
         # Main Layout: Canvas Frame on the Left (expanding), Sidebar on the Right (fixed width)
-        self.main_container = tk.Frame(self.root)
+        self.main_container = tk.Frame(self.root, bg="#FFFFFF")
         self.main_container.pack(fill=tk.BOTH, expand=True)
         
         # Left container (Canvas + Help underneath)
-        self.canvas_frame = tk.Frame(self.main_container)
+        self.canvas_frame = tk.Frame(self.main_container, bg="#FFFFFF")
         self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        self.canvas = tk.Canvas(self.canvas_frame, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(self.canvas_frame, bg="#FAF9F6", highlightthickness=0, bd=0)
         self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
         
         # Help panel placed at the bottom of the canvas
-        self.help_frame = tk.LabelFrame(self.canvas_frame, text="Controls Help", font=("Segoe UI", 9, "bold"), padx=15, pady=8)
+        self.help_frame = tk.LabelFrame(self.canvas_frame, text="Controls Help", font=("Segoe UI", 9, "bold"), padx=15, pady=8, bg="#FFFFFF")
         self.help_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
         help_text = (
@@ -111,46 +76,46 @@ class KarelDrawingApp:
             "🖱️ Click & Drag: Paint cells with robots\n"
             "🖱️ Double-Click: Remove robot from cell"
         )
-        self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.W, font=("Consolas", 9))
+        self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.W, font=("Consolas", 9), bg="#FFFFFF", fg="#4B5563")
         self.help_lbl.pack(fill=tk.X)
         
         # Right container (Sidebar)
-        self.sidebar = tk.Frame(self.main_container, width=280)
+        self.sidebar = tk.Frame(self.main_container, width=280, bg="#F3F4F6")
         self.sidebar.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
         self.sidebar.pack_propagate(False)
         
         # --- Sidebar Widgets ---
         # App Title
-        self.title_lbl = tk.Label(self.sidebar, text="Draw with Karel", font=("Segoe UI", 18, "bold"))
+        self.title_lbl = tk.Label(self.sidebar, text="Draw with Karel", font=("Segoe UI", 18, "bold"), bg="#F3F4F6", fg="#1F2937")
         self.title_lbl.pack(anchor=tk.W, padx=15, pady=(15, 2))
         
-        self.subtitle_lbl = tk.Label(self.sidebar, text="Pixel-by-pixel robot drawer", font=("Segoe UI", 9, "italic"))
+        self.subtitle_lbl = tk.Label(self.sidebar, text="Pixel-by-pixel robot drawer", font=("Segoe UI", 9, "italic"), bg="#F3F4F6", fg="#4B5563")
         self.subtitle_lbl.pack(anchor=tk.W, padx=15, pady=(0, 15))
         
         # Grid settings & Stats Frame
-        self.info_frame = tk.LabelFrame(self.sidebar, text="Board Stats", font=("Segoe UI", 9, "bold"), padx=10, pady=10)
+        self.info_frame = tk.LabelFrame(self.sidebar, text="Board Stats", font=("Segoe UI", 9, "bold"), padx=10, pady=10, bg="#F3F4F6")
         self.info_frame.pack(fill=tk.X, padx=15, pady=5)
         
-        self.grid_size_lbl = tk.Label(self.info_frame, text=f"Grid Size: {self.grid_size} x {self.grid_size}", font=("Segoe UI", 10))
+        self.grid_size_lbl = tk.Label(self.info_frame, text=f"Grid Size: {self.grid_size} x {self.grid_size}", font=("Segoe UI", 10), bg="#F3F4F6", fg="#1F2937")
         self.grid_size_lbl.pack(anchor=tk.W, pady=2)
         
-        self.karel_count_lbl = tk.Label(self.info_frame, text="Total Karels: 0", font=("Segoe UI", 10))
+        self.karel_count_lbl = tk.Label(self.info_frame, text="Total Karels: 0", font=("Segoe UI", 10), bg="#F3F4F6", fg="#1F2937")
         self.karel_count_lbl.pack(anchor=tk.W, pady=2)
         
         # Grid Size Slider
-        self.slider_frame = tk.Frame(self.info_frame)
+        self.slider_frame = tk.Frame(self.info_frame, bg="#F3F4F6")
         self.slider_frame.pack(fill=tk.X, pady=(5, 0))
-        self.slider_lbl = tk.Label(self.slider_frame, text="Adjust Grid Size:", font=("Segoe UI", 9))
+        self.slider_lbl = tk.Label(self.slider_frame, text="Adjust Grid Size:", font=("Segoe UI", 9), bg="#F3F4F6", fg="#1F2937")
         self.slider_lbl.pack(side=tk.LEFT)
         self.grid_slider = tk.Scale(self.slider_frame, from_=1, to=100, orient=tk.HORIZONTAL, showvalue=True, command=self.on_slider_change)
         self.grid_slider.set(self.grid_size)
         self.grid_slider.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
         
         # Color Selector Frame
-        self.color_frame = tk.LabelFrame(self.sidebar, text="Select Color", font=("Segoe UI", 9, "bold"), padx=10, pady=10)
+        self.color_frame = tk.LabelFrame(self.sidebar, text="Select Color", font=("Segoe UI", 9, "bold"), padx=10, pady=10, bg="#F3F4F6")
         self.color_frame.pack(fill=tk.X, padx=15, pady=5)
         
-        self.color_buttons_container = tk.Frame(self.color_frame)
+        self.color_buttons_container = tk.Frame(self.color_frame, bg="#F3F4F6")
         self.color_buttons_container.pack(fill=tk.X)
         
         # Create grid of color buttons (4x2)
@@ -173,34 +138,27 @@ class KarelDrawingApp:
             btn.grid(row=row, column=col, padx=4, pady=4)
             self.color_buttons[col_name] = btn
             
-        self.color_status_lbl = tk.Label(self.color_frame, text=f"Active Color: {self.selected_color}", font=("Segoe UI", 9, "bold"))
+        self.color_status_lbl = tk.Label(self.color_frame, text=f"Active Color: {self.selected_color}", font=("Segoe UI", 9, "bold"), bg="#F3F4F6", fg=COLOR_PALETTE[self.selected_color])
         self.color_status_lbl.pack(anchor=tk.W, pady=(5, 0))
         
         # Actions Frame
-        self.action_frame = tk.LabelFrame(self.sidebar, text="Actions & Simulation", font=("Segoe UI", 9, "bold"), padx=10, pady=10)
+        self.action_frame = tk.LabelFrame(self.sidebar, text="Actions & Simulation", font=("Segoe UI", 9, "bold"), padx=10, pady=10, bg="#F3F4F6")
         self.action_frame.pack(fill=tk.X, padx=15, pady=5)
         
-        self.play_btn = tk.Button(self.action_frame, text="▶ Play Simulation", font=("Segoe UI", 9, "bold"), fg="#10B981", command=self.toggle_play)
+        self.play_btn = tk.Button(self.action_frame, text="▶ Play Simulation", font=("Segoe UI", 9, "bold"), fg="#10B981", command=self.toggle_play, relief=tk.GROOVE, bd=1)
         self.play_btn.pack(fill=tk.X, pady=3)
         
-        self.import_btn = tk.Button(self.action_frame, text="Import Python File", font=("Segoe UI", 9), command=self.import_file)
+        self.import_btn = tk.Button(self.action_frame, text="Import Python File", font=("Segoe UI", 9), command=self.import_file, relief=tk.GROOVE, bd=1)
         self.import_btn.pack(fill=tk.X, pady=3)
         
-        self.export_btn = tk.Button(self.action_frame, text="Export Python File", font=("Segoe UI", 9), command=self.export_file)
+        self.export_btn = tk.Button(self.action_frame, text="Export Python File", font=("Segoe UI", 9), command=self.export_file, relief=tk.GROOVE, bd=1)
         self.export_btn.pack(fill=tk.X, pady=3)
         
-        self.copy_btn = tk.Button(self.action_frame, text="Copy Code to Clipboard", font=("Segoe UI", 9), command=self.copy_code)
+        self.copy_btn = tk.Button(self.action_frame, text="Copy Code to Clipboard", font=("Segoe UI", 9), command=self.copy_code, relief=tk.GROOVE, bd=1)
         self.copy_btn.pack(fill=tk.X, pady=3)
         
-        self.clear_btn = tk.Button(self.action_frame, text="Clear Board", font=("Segoe UI", 9), fg="#EF4444", command=self.clear_board)
+        self.clear_btn = tk.Button(self.action_frame, text="Clear Board", font=("Segoe UI", 9), fg="#EF4444", command=self.clear_board, relief=tk.GROOVE, bd=1)
         self.clear_btn.pack(fill=tk.X, pady=3)
-        
-        # Footer (Theme Toggle)
-        self.footer_frame = tk.Frame(self.sidebar)
-        self.footer_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=15, pady=10)
-        
-        self.theme_btn = tk.Button(self.footer_frame, text="🌙 Dark Mode", font=("Segoe UI", 9), command=self.toggle_theme)
-        self.theme_btn.pack(fill=tk.X)
 
     def set_color(self, name):
         self.selected_color = name
@@ -210,67 +168,9 @@ class KarelDrawingApp:
     def update_color_buttons_highlight(self):
         for name, btn in self.color_buttons.items():
             if name == self.selected_color:
-                btn.config(relief=tk.SUNKEN, bd=2, highlightbackground="#1F2937", highlightcolor="#1F2937")
+                btn.config(relief=tk.SUNKEN, bd=2)
             else:
-                btn.config(relief=tk.FLAT, bd=0, highlightbackground=btn.cget("bg"), highlightcolor=btn.cget("bg"))
-
-    def toggle_theme(self):
-        self.dark_mode = not self.dark_mode
-        self.apply_theme()
-        self.redraw()
-        
-    def apply_theme(self):
-        theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
-        
-        # Main background
-        self.root.config(bg=theme["bg"])
-        self.main_container.config(bg=theme["bg"])
-        self.canvas_frame.config(bg=theme["bg"])
-        
-        # Canvas colors
-        self.canvas.config(bg=theme["canvas_bg"])
-        
-        # Sidebar
-        self.sidebar.config(bg=theme["sidebar_bg"], highlightbackground=theme["border"], highlightcolor=theme["border"])
-        self.title_lbl.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        self.subtitle_lbl.config(bg=theme["sidebar_bg"], fg=theme["text_sec"])
-        
-        # Info Panel
-        self.info_frame.config(bg=theme["sidebar_bg"], fg=theme["text"], highlightcolor=theme["border"])
-        self.grid_size_lbl.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        self.karel_count_lbl.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        self.slider_frame.config(bg=theme["sidebar_bg"])
-        self.slider_lbl.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        self.grid_slider.config(bg=theme["sidebar_bg"], fg=theme["text"], highlightbackground=theme["sidebar_bg"])
-        
-        # Color Selector Panel
-        self.color_frame.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        self.color_buttons_container.config(bg=theme["sidebar_bg"])
-        self.color_status_lbl.config(bg=theme["sidebar_bg"])
-        self.set_color(self.selected_color) # refresh color text color
-        
-        # Actions Panel
-        self.action_frame.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        for btn in [self.import_btn, self.export_btn, self.copy_btn, self.play_btn]:
-            btn.config(bg=theme["button_bg"], activebackground=theme["active_button_bg"], relief=tk.GROOVE, bd=1)
-            
-        if self.is_playing:
-            self.play_btn.config(fg="#EF4444", activeforeground="#EF4444")
-        else:
-            self.play_btn.config(fg="#10B981", activeforeground="#10B981")
-            
-        self.clear_btn.config(bg=theme["button_bg"], fg="#EF4444", activebackground=theme["active_button_bg"], activeforeground="#EF4444", relief=tk.GROOVE, bd=1)
-        
-        # Bottom Help Panel colors
-        self.help_frame.config(bg=theme["bg"], fg=theme["text"])
-        self.help_lbl.config(bg=theme["bg"], fg=theme["text_sec"])
-        
-        # Footer
-        self.footer_frame.config(bg=theme["sidebar_bg"])
-        theme_btn_text = "☀️ Light Mode" if self.dark_mode else "🌙 Dark Mode"
-        self.theme_btn.config(text=theme_btn_text, bg=theme["button_bg"], fg=theme["button_fg"], activebackground=theme["active_button_bg"], activeforeground=theme["button_fg"])
-        
-        self.update_color_buttons_highlight()
+                btn.config(relief=tk.FLAT, bd=0)
 
     # --- Grid Logic & Rendering ---
     def redraw(self):
@@ -286,11 +186,9 @@ class KarelDrawingApp:
         cell_w = w / self.grid_size
         cell_h = h / self.grid_size
         
-        theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
-        
         # 1. Cycle detection & highlight loops with dull yellow
         cycles, node_to_head, cycle_heads = self.detect_loops_and_chains()
-        highlight_color = "#3F3715" if self.dark_mode else "#FEF08A"
+        highlight_color = "#FEF08A"
         
         cycle_cells = set()
         for cycle in cycles:
@@ -306,8 +204,8 @@ class KarelDrawingApp:
         
         # 2. Draw Grid Lines
         for i in range(self.grid_size + 1):
-            self.canvas.create_line(i * cell_w, 0, i * cell_w, h, fill=theme["grid_line"], width=1)
-            self.canvas.create_line(0, i * cell_h, w, i * cell_h, fill=theme["grid_line"], width=1)
+            self.canvas.create_line(i * cell_w, 0, i * cell_w, h, fill="#E5E7EB", width=1)
+            self.canvas.create_line(0, i * cell_h, w, i * cell_h, fill="#E5E7EB", width=1)
             
         # 3. Draw Karels
         S = min(cell_w, cell_h)
@@ -318,7 +216,18 @@ class KarelDrawingApp:
                 
                 # Check if this robot is moving (associated with a cycle head)
                 parent_head = node_to_head.get((col, row))
-                self.draw_karel(cx, cy, S, data["direction"], COLOR_PALETTE[data["color"]], col, row, parent_head)
+                
+                if self.is_playing and parent_head is not None:
+                    acc = self.loop_accumulators.get(parent_head, 0)
+                    speed = self.loop_speeds.get(parent_head, 0)
+                    threshold = 500 if speed == 0 else 250 if speed == 1 else 100
+                    progress = min(1.0, acc / threshold)
+                    
+                    dx, dy = self.get_dir_delta(data["direction"])
+                    cx += dx * progress * cell_w
+                    cy += dy * progress * cell_h
+
+                self.draw_karel(cx, cy, S, data["direction"], COLOR_PALETTE.get(data["color"], "#EF4444"), col, row, parent_head)
                 
         # 4. Draw Speed Buttons on top left of the head cell for each active loop
         for head in cycle_heads:
@@ -329,11 +238,11 @@ class KarelDrawingApp:
                 x2 = x1 + 22
                 y2 = y1 + 22
                 
-                self.canvas.create_oval(x1, y1, x2, y2, fill="#E5E7EB" if not self.dark_mode else "#374151", outline="#9CA3AF", width=1, tags="speed_btn")
+                self.canvas.create_oval(x1, y1, x2, y2, fill="#E5E7EB", outline="#9CA3AF", width=1, tags="speed_btn")
                 
                 speed = self.loop_speeds.get(head, 0)
                 speed_text = "1x" if speed == 0 else "2x" if speed == 1 else "3x"
-                self.canvas.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=speed_text, font=("Segoe UI", 8, "bold"), fill="#1F2937" if not self.dark_mode else "#F9FAFB", tags="speed_btn")
+                self.canvas.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=speed_text, font=("Segoe UI", 8, "bold"), fill="#1F2937", tags="speed_btn")
                 
                 # Bounding box for click triggers
                 self.speed_buttons[head] = (x1, y1, x2, y2)
@@ -354,18 +263,10 @@ class KarelDrawingApp:
         return x, y
 
     def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0, parent_head=None):
-        theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
-        outline_color = theme["karel_outline"]
-        
+        outline_color = "#1F2937"
         line_width = max(2, int(S * 0.06))
         
-        # Screen Christmas light flashing effect (only blinks if robot is in an active cycle)
-        if self.is_playing and parent_head is not None:
-            # Sync blinking with this loop's steps counter
-            state = (col + row + self.loop_steps_count.get(parent_head, 0)) % 2
-            screen_fill = "#EF4444" if state == 0 else "#10B981"
-        else:
-            screen_fill = "#FFFFFF" if not self.dark_mode else "#1F2937"
+        screen_fill = "#FFFFFF"
             
         # Body: Classic beveled card shape
         body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
@@ -403,23 +304,21 @@ class KarelDrawingApp:
         h = self.canvas.winfo_height()
         cell_w = w / self.grid_size
         cell_h = h / self.grid_size
-        
         col = max(0, min(self.grid_size - 1, int(click_x / cell_w)))
         row = max(0, min(self.grid_size - 1, int(click_y / cell_h)))
         return col, row
 
     def handle_click(self, event):
-        # 1. Check if click falls within any speed buttons
+        # Speed button hit test
         for head, bbox in self.speed_buttons.items():
             x1, y1, x2, y2 = bbox
             if x1 <= event.x <= x2 and y1 <= event.y <= y2:
-                # Cycle speed setting: 1x (0) -> 2x (1) -> 3x (2)
                 curr_speed = self.loop_speeds.get(head, 0)
                 self.loop_speeds[head] = (curr_speed + 1) % 3
                 self.redraw()
                 return
-                
-        # 2. Otherwise run double click checks
+        
+        # Single-click delay to distinguish from double-click
         if self.click_timer is not None:
             self.root.after_cancel(self.click_timer)
             self.click_timer = None
@@ -437,17 +336,14 @@ class KarelDrawingApp:
         col, row = self.get_cell_coords(event.x, event.y)
         
         if (col, row) in self.karels:
-            # Cycle direction: East -> North -> West -> South
+            # Rotate existing karel
             dirs = ["East", "North", "West", "South"]
             curr_dir = self.karels[(col, row)]["direction"]
             next_idx = (dirs.index(curr_dir) + 1) % 4
             self.karels[(col, row)]["direction"] = dirs[next_idx]
         else:
-            # Place new Karel
-            self.karels[(col, row)] = {
-                "direction": "East",
-                "color": self.selected_color
-            }
+            # Place new karel
+            self.karels[(col, row)] = {"direction": "East", "color": self.selected_color}
             
         self.logical_grid_size = self.grid_size
         self.redraw()
@@ -455,10 +351,8 @@ class KarelDrawingApp:
     def handle_drag(self, event):
         if self.drag_start is None:
             return
-            
         dx = event.x - self.drag_start[0]
         dy = event.y - self.drag_start[1]
-        
         if (dx*dx + dy*dy) > 25:
             self.is_dragging = True
             if self.click_timer is not None:
@@ -468,10 +362,7 @@ class KarelDrawingApp:
         if self.is_dragging:
             col, row = self.get_cell_coords(event.x, event.y)
             if (col, row) not in self.karels:
-                self.karels[(col, row)] = {
-                    "direction": "East",
-                    "color": self.selected_color
-                }
+                self.karels[(col, row)] = {"direction": "East", "color": self.selected_color}
                 self.logical_grid_size = self.grid_size
                 self.redraw()
 
@@ -483,7 +374,6 @@ class KarelDrawingApp:
         if self.click_timer is not None:
             self.root.after_cancel(self.click_timer)
             self.click_timer = None
-            
         col, row = self.get_cell_coords(event.x, event.y)
         if (col, row) in self.karels:
             del self.karels[(col, row)]
@@ -527,7 +417,6 @@ class KarelDrawingApp:
             self.animate_tick()
         else:
             self.play_btn.config(text="▶ Play Simulation", fg="#10B981")
-        self.apply_theme()
 
     def animate_tick(self):
         if not self.is_playing:
@@ -547,6 +436,7 @@ class KarelDrawingApp:
 
     def detect_loops_and_chains(self):
         cycles = []
+        ordered_cycles = []   # Ordered cycle paths (preserve traversal order)
         node_to_head = {}
         visited_global = set()
         
@@ -564,6 +454,7 @@ class KarelDrawingApp:
                     cycle = path[cycle_start_idx:]
                     if len(cycle) >= 4:
                         cycles.append(set(cycle))
+                        ordered_cycles.append(list(cycle))
                     break
                 if curr in visited_global:
                     break
@@ -581,9 +472,11 @@ class KarelDrawingApp:
                 
         # 2. Sort out head cell for each cycle (highest, leftest)
         cycle_heads = set()
-        for cycle in cycles:
+        self._head_to_ordered = {}
+        for i, cycle in enumerate(cycles):
             head = min(cycle, key=lambda p: (p[1], p[0]))
             cycle_heads.add(head)
+            self._head_to_ordered[head] = ordered_cycles[i]
             for node in cycle:
                 node_to_head[node] = head
                 
@@ -618,8 +511,6 @@ class KarelDrawingApp:
         self.loop_accumulators = {h: self.loop_accumulators[h] for h in self.loop_accumulators if h in cycle_heads}
         self.loop_steps_count = {h: self.loop_steps_count[h] for h in self.loop_steps_count if h in cycle_heads}
         
-        robots_to_move = set()
-        
         # Check loops independently using their specific speeds
         for head in cycle_heads:
             self.loop_accumulators[head] = self.loop_accumulators.get(head, 0) + 50
@@ -632,28 +523,15 @@ class KarelDrawingApp:
                 # Advance blink state tick
                 self.loop_steps_count[head] = (self.loop_steps_count.get(head, 0) + 1) % 2
                 
-                # Add all associated loop and chain cells to move set
-                for pos, parent_head in node_to_head.items():
-                    if parent_head == head:
-                        robots_to_move.add(pos)
+                # Rotate colors along the ordered cycle path.
+                # Positions and directions stay fixed (they define the "track").
+                # Only the color data chases around the cycle like Christmas lights.
+                ordered = self._head_to_ordered.get(head, [])
+                if len(ordered) >= 4:
+                    colors = [self.karels[pos]["color"] for pos in ordered]
+                    for i, pos in enumerate(ordered):
+                        self.karels[pos]["color"] = colors[(i - 1) % len(colors)]
                         
-        if not robots_to_move:
-            self.redraw() # Still redraw for blink updates
-            return
-            
-        new_karels = {}
-        for pos, data in self.karels.items():
-            if pos not in robots_to_move:
-                new_karels[pos] = data
-                
-        for pos in robots_to_move:
-            col, row = pos
-            data = self.karels[pos]
-            dx, dy = self.get_dir_delta(data["direction"])
-            next_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
-            new_karels[next_pos] = data
-            
-        self.karels = new_karels
         self.redraw()
 
     # --- Import / Export Logic ---
@@ -699,6 +577,7 @@ class KarelStaticViewer:
         self.loop_accumulators = {{}}
         self.loop_steps_count = {{}}
         self.speed_buttons = {{}}
+        self._head_to_ordered = {{}}
         
         # Palettes for rendering
         self.color_palette = {{
@@ -718,11 +597,11 @@ class KarelStaticViewer:
         self.help_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
         help_text = (
-            "🖱️ Scroll Wheel: Zoom / Adjust grid size\\n"
-            "🖱️ Left Click:   Place robot (on empty cell)\\n"
-            "                Rotate robot (90° turn on occupied cell)\\n"
-            "🖱️ Click & Drag: Paint cells with robots\\n"
-            "🖱️ Double-Click: Remove robot from cell"
+            "\\U0001f5b1\\ufe0f Scroll Wheel: Zoom / Adjust grid size\\n"
+            "\\U0001f5b1\\ufe0f Left Click:   Place robot (on empty cell)\\n"
+            "                Rotate robot (90\\u00b0 turn on occupied cell)\\n"
+            "\\U0001f5b1\\ufe0f Click & Drag: Paint cells with robots\\n"
+            "\\U0001f5b1\\ufe0f Double-Click: Remove robot from cell"
         )
         self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.W, font=("Consolas", 9), bg="#FAF9F6", fg="#4B5563")
         self.help_lbl.pack(fill=tk.X)
@@ -733,7 +612,7 @@ class KarelStaticViewer:
         
         self.play_btn = tk.Button(
             self.control_frame, 
-            text="▶ Play Simulation", 
+            text="\\u25b6 Play Simulation", 
             font=("Segoe UI", 10, "bold"), 
             fg="#10B981", 
             command=self.toggle_play,
@@ -786,15 +665,18 @@ class KarelStaticViewer:
     def toggle_play(self):
         self.is_playing = not self.is_playing
         if self.is_playing:
-            self.play_btn.config(text="⏸ Pause Simulation", fg="#EF4444")
+            self.play_btn.config(text="\\u23f8 Pause Simulation", fg="#EF4444")
             self.animate_tick()
         else:
-            self.play_btn.config(text="▶ Play Simulation", fg="#10B981")
+            self.play_btn.config(text="\\u25b6 Play Simulation", fg="#10B981")
             
     def animate_tick(self):
         if not self.is_playing:
             return
-        self.run_simulation_step()
+        try:
+            self.run_simulation_step()
+        except Exception:
+            pass
         self.root.after(50, self.animate_tick)
         
     def get_dir_delta(self, direction):
@@ -806,6 +688,7 @@ class KarelStaticViewer:
         
     def detect_loops_and_chains(self):
         cycles = []
+        ordered_cycles = []
         node_to_head = {{}}
         visited_global = set()
         
@@ -821,6 +704,7 @@ class KarelStaticViewer:
                     cycle = path[cycle_start_idx:]
                     if len(cycle) >= 4:
                         cycles.append(set(cycle))
+                        ordered_cycles.append(list(cycle))
                     break
                 if curr in visited_global:
                     break
@@ -834,9 +718,11 @@ class KarelStaticViewer:
                 visited_global.add(node)
                 
         cycle_heads = set()
-        for cycle in cycles:
+        self._head_to_ordered = {{}}
+        for i, cycle in enumerate(cycles):
             head = min(cycle, key=lambda p: (p[1], p[0]))
             cycle_heads.add(head)
+            self._head_to_ordered[head] = ordered_cycles[i]
             for node in cycle:
                 node_to_head[node] = head
                 
@@ -867,7 +753,6 @@ class KarelStaticViewer:
         self.loop_accumulators = {{h: self.loop_accumulators[h] for h in self.loop_accumulators if h in cycle_heads}}
         self.loop_steps_count = {{h: self.loop_steps_count[h] for h in self.loop_steps_count if h in cycle_heads}}
         
-        robots_to_move = set()
         for head in cycle_heads:
             self.loop_accumulators[head] = self.loop_accumulators.get(head, 0) + 50
             speed = self.loop_speeds.get(head, 0)
@@ -875,26 +760,13 @@ class KarelStaticViewer:
             if self.loop_accumulators[head] >= threshold:
                 self.loop_accumulators[head] -= threshold
                 self.loop_steps_count[head] = (self.loop_steps_count.get(head, 0) + 1) % 2
-                for pos, parent_head in node_to_head.items():
-                    if parent_head == head:
-                        robots_to_move.add(pos)
-                        
-        if not robots_to_move:
-            self.draw()
-            return
-            
-        new_karels = {{}}
-        for pos, data in self.karels.items():
-            if pos not in robots_to_move:
-                new_karels[pos] = data
-        for pos in robots_to_move:
-            col, row = pos
-            data = self.karels[pos]
-            dx, dy = self.get_dir_delta(data["direction"])
-            next_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
-            new_karels[next_pos] = data
-            
-        self.karels = new_karels
+                
+                ordered = self._head_to_ordered.get(head, [])
+                if len(ordered) >= 4:
+                    colors = [self.karels[pos]["color"] for pos in ordered]
+                    for i, pos in enumerate(ordered):
+                        self.karels[pos]["color"] = colors[(i - 1) % len(colors)]
+        
         self.draw()
         self.info_lbl.config(text=f"Grid: {{self.grid_size}}x{{self.grid_size}} | Karels: {{len(self.karels)}}")
         
@@ -932,6 +804,17 @@ class KarelStaticViewer:
                 cx = col * cell_w + cell_w / 2
                 cy = row * cell_h + cell_h / 2
                 parent_head = node_to_head.get((col, row))
+                
+                if self.is_playing and parent_head is not None:
+                    acc = self.loop_accumulators.get(parent_head, 0)
+                    speed = self.loop_speeds.get(parent_head, 0)
+                    threshold = 500 if speed == 0 else 250 if speed == 1 else 100
+                    progress = min(1.0, acc / threshold)
+                    
+                    dx, dy = self.get_dir_delta(data["direction"])
+                    cx += dx * progress * cell_w
+                    cy += dy * progress * cell_h
+                    
                 self.draw_karel(cx, cy, S, data["direction"], self.color_palette.get(data["color"], "#EF4444"), col, row, parent_head)
                 
         # Draw Speed Buttons
@@ -963,11 +846,7 @@ class KarelStaticViewer:
         outline_color = "#1F2937"
         line_width = max(2, int(S * 0.06))
         
-        if self.is_playing and parent_head is not None:
-            state = (col + row + self.loop_steps_count.get(parent_head, 0)) % 2
-            screen_fill = "#EF4444" if state == 0 else "#10B981"
-        else:
-            screen_fill = "#FFFFFF"
+        screen_fill = "#FFFFFF"
             
         # Body
         body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
