@@ -57,6 +57,7 @@ class KarelDrawingApp:
         
         # State variables
         self.grid_size = 10
+        self.logical_grid_size = 10
         self.karels = {}  # (x, y) -> {"direction": str, "color": str}
         self.selected_color = "Red"
         self.dark_mode = False
@@ -448,6 +449,7 @@ class KarelDrawingApp:
                 "color": self.selected_color
             }
             
+        self.logical_grid_size = self.grid_size
         self.redraw()
 
     def handle_drag(self, event):
@@ -470,6 +472,7 @@ class KarelDrawingApp:
                     "direction": "East",
                     "color": self.selected_color
                 }
+                self.logical_grid_size = self.grid_size
                 self.redraw()
 
     def handle_release(self, event):
@@ -484,6 +487,7 @@ class KarelDrawingApp:
         col, row = self.get_cell_coords(event.x, event.y)
         if (col, row) in self.karels:
             del self.karels[(col, row)]
+            self.logical_grid_size = self.grid_size
             self.redraw()
 
     def handle_mouse_wheel(self, event):
@@ -512,6 +516,7 @@ class KarelDrawingApp:
             return
         if messagebox.askyesno("Clear Board", "Are you sure you want to remove all Karels?"):
             self.karels.clear()
+            self.logical_grid_size = self.grid_size
             self.redraw()
 
     # --- Simulation Logic ---
@@ -567,7 +572,7 @@ class KarelDrawingApp:
                 col, row = curr
                 data = self.karels[curr]
                 dx, dy = self.get_dir_delta(data["direction"])
-                curr = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                curr = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
                 
             for node in path:
                 visited_global.add(node)
@@ -592,7 +597,7 @@ class KarelDrawingApp:
                 col, row = pos
                 direction = data["direction"]
                 dx, dy = self.get_dir_delta(direction)
-                front_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                front_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
                 
                 if front_pos in moving:
                     front_data = self.karels[front_pos]
@@ -643,7 +648,7 @@ class KarelDrawingApp:
             col, row = pos
             data = self.karels[pos]
             dx, dy = self.get_dir_delta(data["direction"])
-            next_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+            next_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
             new_karels[next_pos] = data
             
         self.karels = new_karels
@@ -669,7 +674,7 @@ class KarelDrawingApp:
         code_template = f'''# Draw with Karel - Exported Drawing
 # Run this script standalone to view your drawing, or load it in the editor.
 
-GRID_SIZE = {self.grid_size}
+GRID_SIZE = {self.logical_grid_size}
 KARELS = {karels_str}
 
 # --- STANDALONE VIEWER CODE ---
@@ -683,6 +688,7 @@ class KarelStaticViewer:
         self.root.minsize(450, 500)
         
         self.grid_size = grid_size
+        self.logical_grid_size = grid_size
         self.karels = {{(k["x"], k["y"]): {{"direction": k["direction"], "color": k["color"]}} for k in karels}}
         self.is_playing = False
         
@@ -745,6 +751,9 @@ class KarelStaticViewer:
         
         self.canvas.bind("<Configure>", lambda e: self.draw())
         self.canvas.bind("<Button-1>", self.handle_click)
+        self.canvas.bind("<MouseWheel>", self.handle_mouse_wheel)
+        self.canvas.bind("<Button-4>", self.handle_mouse_wheel)
+        self.canvas.bind("<Button-5>", self.handle_mouse_wheel)
         
     def handle_click(self, event):
         for head, bbox in self.speed_buttons.items():
@@ -754,6 +763,23 @@ class KarelStaticViewer:
                 self.loop_speeds[head] = (curr_speed + 1) % 3
                 self.draw()
                 return
+
+    def handle_mouse_wheel(self, event):
+        change = 0
+        if event.num == 4 or (event.delta and event.delta > 0):
+            change = 1
+        elif event.num == 5 or (event.delta and event.delta < 0):
+            change = -1
+            
+        if change != 0:
+            self.adjust_grid_size(change)
+
+    def adjust_grid_size(self, change):
+        new_size = self.grid_size + change
+        if 1 <= new_size <= 100:
+            self.grid_size = new_size
+            self.draw()
+            self.info_lbl.config(text=f"Grid: {{self.grid_size}}x{{self.grid_size}} | Karels: {{len(self.karels)}}")
 
     def toggle_play(self):
         self.is_playing = not self.is_playing
@@ -801,7 +827,7 @@ class KarelStaticViewer:
                 col, row = curr
                 data = self.karels[curr]
                 dx, dy = self.get_dir_delta(data["direction"])
-                curr = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                curr = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
             for node in path:
                 visited_global.add(node)
                 
@@ -822,7 +848,7 @@ class KarelStaticViewer:
                 col, row = pos
                 direction = data["direction"]
                 dx, dy = self.get_dir_delta(direction)
-                front_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                front_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
                 if front_pos in moving:
                     front_data = self.karels[front_pos]
                     if front_data["direction"] == direction:
@@ -863,7 +889,7 @@ class KarelStaticViewer:
             col, row = pos
             data = self.karels[pos]
             dx, dy = self.get_dir_delta(data["direction"])
-            next_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+            next_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
             new_karels[next_pos] = data
             
         self.karels = new_karels
@@ -1039,6 +1065,7 @@ if __name__ == "__main__":
                 }
                 
             self.grid_size = imported_grid_size
+            self.logical_grid_size = imported_grid_size
             self.grid_slider.set(imported_grid_size)
             self.karels = new_karels
             self.redraw()
