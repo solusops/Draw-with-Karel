@@ -2,17 +2,6 @@
 from character import rotate_point
 
 def draw_custom_character(canvas, cx, cy, cell_size, direction, color_hex):
-    def rotate_point(x, y, direction):
-        if direction == "East":
-            return x, y
-        elif direction == "South":
-            return -y, x
-        elif direction == "West":
-            return -x, -y
-        elif direction == "North":
-            return y, -x
-        return x, y
-
     line_width = max(2, int(cell_size * 0.06))
     
     # Coordinates for '2' based on center (0,0) with range roughly -0.4 to 0.4

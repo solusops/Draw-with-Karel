@@ -7,7 +7,8 @@ class World:
         self.grid_size = initial_grid_size
         
         # The logical grid size used for simulation (allows us to zoom in/out without breaking loops)
-        self.logical_grid_size = initial_grid_size
+        self.logical_grid_cols = initial_grid_size
+        self.logical_grid_rows = initial_grid_size
         
         # A dictionary to store Karels. 
         # The key is a tuple (column, row).
@@ -43,9 +44,10 @@ class World:
         if self.grid_size < 50:
             self.grid_size += 1
 
-    def sync_logical_grid(self):
+    def sync_logical_grid(self, cols, rows):
         """
         Synchronizes the logical simulation boundary with the current visible grid size.
         This is typically called when the simulation is stopped/reset.
         """
-        self.logical_grid_size = self.grid_size
+        self.logical_grid_cols = cols
+        self.logical_grid_rows = rows

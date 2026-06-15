@@ -15,13 +15,6 @@ def draw_custom_character(canvas, cx, cy, cell_size, direction, color_hex):
         (-0.25, -0.05), (-0.1, -0.05), (-0.1, -0.2), (-0.25, -0.2)
     ]
 
-    def rotate_point(x, y, direction):
-        if direction == "East": return (x, y)
-        if direction == "South": return (-y, x)
-        if direction == "West": return (-x, -y)
-        if direction == "North": return (y, -x)
-        return (x, y)
-
     rotated_pts = [rotate_point(x, y, direction) for x, y in pts]
     screen_pts = []
     for rx, ry in rotated_pts:

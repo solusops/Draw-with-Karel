@@ -11,7 +11,7 @@ def find_next_karel_in_line(world, col, row, dx, dy):
     curr_col = col + dx
     curr_row = row + dy
     
-    while 0 <= curr_col < world.logical_grid_size and 0 <= curr_row < world.logical_grid_size:
+    while 0 <= curr_col < world.logical_grid_cols and 0 <= curr_row < world.logical_grid_rows:
         # Check if there is a Karel at this position
         if world.get_karel(curr_col, curr_row) is not None:
             return (curr_col, curr_row)

@@ -9,41 +9,45 @@
 import tkinter as tk
 from colors import OUTLINE_COLOR
 
+import math
+
 # --- DIRECTION HELPERS ---
 
-DIRECTIONS = ["East", "South", "West", "North"]
+DIRECTIONS = ["East", "SouthEast", "South", "SouthWest", "West", "NorthWest", "North", "NorthEast"]
 
 def get_next_direction(current_direction):
-    """Returns the next direction when you click a shape (turns 90 degrees clockwise)."""
+    """Returns the next direction when you click a shape (turns 45 degrees clockwise)."""
     for i in range(len(DIRECTIONS)):
         if DIRECTIONS[i] == current_direction:
-            next_index = (i + 1) % 4
+            next_index = (i + 1) % len(DIRECTIONS)
             return DIRECTIONS[next_index]
     return "East"
 
 def get_dir_delta(direction):
     """Returns how much to move (x, y) for a given direction."""
-    if direction == "East":
-        return 1, 0   # Right
-    elif direction == "West":
-        return -1, 0  # Left
-    elif direction == "North":
-        return 0, -1  # Up
-    elif direction == "South":
-        return 0, 1   # Down
+    if direction == "East": return 1, 0
+    elif direction == "SouthEast": return 1, 1
+    elif direction == "South": return 0, 1
+    elif direction == "SouthWest": return -1, 1
+    elif direction == "West": return -1, 0
+    elif direction == "NorthWest": return -1, -1
+    elif direction == "North": return 0, -1
+    elif direction == "NorthEast": return 1, -1
     return 0, 0
 
 def rotate_point(x, y, direction):
     """Rotates an (x, y) point so the shape faces the right way."""
-    if direction == "East":
-        return x, y
-    elif direction == "North":
-        return y, -x
-    elif direction == "West":
-        return -x, -y
-    elif direction == "South":
-        return -y, x
-    return x, y
+    angles = {
+        "East": 0, "SouthEast": 45, "South": 90, "SouthWest": 135,
+        "West": 180, "NorthWest": 225, "North": 270, "NorthEast": 315
+    }
+    angle_deg = angles.get(direction, 0)
+    angle_rad = math.radians(angle_deg)
+    
+    new_x = x * math.cos(angle_rad) - y * math.sin(angle_rad)
+    new_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
+    
+    return new_x, new_y
 
 # --- CHARACTER DRAWING FUNCTIONS ---
 

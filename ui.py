@@ -237,10 +237,13 @@ class KarelUI:
 
     def draw_grid(self, width, height, cell_size):
         """Draws the grid lines."""
-        for col in range(self.world.grid_size + 1):
+        cols = int(width / cell_size) + 1
+        rows = int(height / cell_size) + 1
+        
+        for col in range(cols):
             x = col * cell_size
             self.canvas.create_line(x, 0, x, height, fill=GRID_LINE_COLOR, width=1)
-        for row in range(self.world.grid_size + 1):
+        for row in range(rows):
             y = row * cell_size
             self.canvas.create_line(0, y, width, y, fill=GRID_LINE_COLOR, width=1)
 

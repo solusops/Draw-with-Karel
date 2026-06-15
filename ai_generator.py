@@ -19,6 +19,7 @@ def generate_shape_code(api_key, shape_description):
         1. Write a SINGLE Python function named exactly 'draw_custom_character'.
         2. The function signature MUST be: def draw_custom_character(canvas, cx, cy, cell_size, direction, color_hex):
         3. You must use 'rotate_point(x, y, direction)' to rotate all coordinates. The base character (direction == "East") should face RIGHT.
+        3a. IMPORTANT: DO NOT define the 'rotate_point' function yourself! It is already imported globally. Just call it.
         4. The coordinates x and y for rotate_point should be relative to the center (0,0) and typically range from -0.4 to 0.4.
         5. To get screen coordinates, use this exact formula:
            screen_x = cx + rotated_x * cell_size

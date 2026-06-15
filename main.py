@@ -15,7 +15,8 @@ class KarelApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Draw with Karel")
-        self.root.geometry("800x800")
+        self.root.geometry("1100x800")
+        self.root.configure(bg="#F3F4F6")
         
         # Initialize our game state
         self.world = World(initial_grid_size=3)
@@ -34,6 +35,7 @@ class KarelApp:
 
     def bind_events(self):
         # Mouse clicks
+        self.last_placed_direction = "East"
         self.ui.canvas.bind("<Button-1>", self.on_left_click)
         self.ui.canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.ui.canvas.bind("<Button-3>", self.on_right_click)
@@ -60,11 +62,14 @@ class KarelApp:
             return None, None
             
         cell_size = min(width, height) / self.world.grid_size
-        col = int(event.x / cell_size)
-        row = int(event.y / cell_size)
+        col = int(event.x // cell_size)
+        row = int(event.y // cell_size)
+        
+        cols = int(width / cell_size)
+        rows = int(height / cell_size)
         
         # Only return valid coordinates
-        if 0 <= col < self.world.grid_size and 0 <= row < self.world.grid_size:
+        if 0 <= col < cols and 0 <= row < rows:
             return col, row
         return None, None
 
@@ -87,12 +92,12 @@ class KarelApp:
         karel = self.world.get_karel(col, row)
         if karel is None:
             # Place a new Karel
-            self.world.add_karel(col, row, "East", self.ui.current_color)
-            # Add the chosen shape!
+            self.world.add_karel(col, row, self.last_placed_direction, self.ui.current_color)
             self.world.karels[(col, row)]["shape"] = self.ui.current_shape
         else:
             # Turn the existing Karel
             karel["direction"] = get_next_direction(karel["direction"])
+            self.last_placed_direction = karel["direction"]
             
         self.update_canvas()
         
@@ -104,7 +109,7 @@ class KarelApp:
             
         # Only place if empty
         if self.world.get_karel(col, row) is None:
-            self.world.add_karel(col, row, "East", self.ui.current_color)
+            self.world.add_karel(col, row, self.last_placed_direction, self.ui.current_color)
             self.world.karels[(col, row)]["shape"] = self.ui.current_shape
             self.update_canvas()
 
@@ -183,7 +188,14 @@ class KarelApp:
         
         if self.anim_state.is_playing:
             self.ui.btn_play.config(text="Pause", bg="#F59E0B")
-            self.world.sync_logical_grid()
+            
+            width = self.ui.canvas.winfo_width()
+            height = self.ui.canvas.winfo_height()
+            if width > 1 and height > 1:
+                cell_size = min(width, height) / self.world.grid_size
+                cols = int(width / cell_size) + 1
+                rows = int(height / cell_size) + 1
+                self.world.sync_logical_grid(cols, rows)
         else:
             self.ui.btn_play.config(text="Play", bg="#10B981")
             

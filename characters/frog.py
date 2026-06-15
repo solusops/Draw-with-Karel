@@ -4,17 +4,6 @@ from character import rotate_point
 def draw_custom_character(canvas, cx, cy, cell_size, direction, color_hex):
     line_width = max(2, int(cell_size * 0.06))
 
-    def rotate_point(x, y, direction):
-        if direction == "East":
-            return (x, y)
-        elif direction == "South":
-            return (-y, x)
-        elif direction == "West":
-            return (-x, -y)
-        elif direction == "North":
-            return (y, -x)
-        return (x, y)
-
     # Frog body (ellipse)
     body_coords = (-0.35, -0.2, 0.35, 0.2)
     x1, y1 = rotate_point(body_coords[0], body_coords[1], direction)
