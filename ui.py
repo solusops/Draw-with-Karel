@@ -2,8 +2,14 @@
 # This module handles drawing everything on the screen!
 
 import tkinter as tk
+from tkinter import messagebox
+import threading
 from colors import *
-from shapes import AVAILABLE_SHAPES, draw_shape_by_name
+from character import AVAILABLE_CHARACTERS, draw_character_by_name
+try:
+    from ai_generator import generate_shape_code, save_and_load_shape
+except ImportError:
+    pass
 
 class KarelUI:
     def __init__(self, root, world, anim_state):
@@ -32,8 +38,20 @@ class KarelUI:
         self.setup_toolbar()
         
     def setup_toolbar(self):
+        # We use a container frame for the toolbar so we can swap it out easily
+        self.toolbar_container = tk.Frame(self.control_panel, bg=BACKGROUND_COLOR)
+        self.toolbar_container.pack(fill=tk.X, expand=True)
+        
+        # The standard toolbar
+        self.toolbar_frame = tk.Frame(self.toolbar_container, bg=BACKGROUND_COLOR)
+        self.toolbar_frame.pack(fill=tk.X, expand=True)
+        
+        # The AI generator toolbar (hidden initially)
+        self.ai_frame = tk.Frame(self.toolbar_container, bg=BACKGROUND_COLOR)
+        
+        # --- Standard Toolbar Components ---
         # Color palette
-        palette_frame = tk.Frame(self.control_panel, bg=BACKGROUND_COLOR)
+        palette_frame = tk.Frame(self.toolbar_frame, bg=BACKGROUND_COLOR)
         palette_frame.pack(side=tk.LEFT, padx=10)
         
         tk.Label(palette_frame, text="Colors:", bg=BACKGROUND_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT)
@@ -43,21 +61,21 @@ class KarelUI:
             btn.pack(side=tk.LEFT, padx=2)
             
         # Shape palette
-        shape_frame = tk.Frame(self.control_panel, bg=BACKGROUND_COLOR)
+        shape_frame = tk.Frame(self.toolbar_frame, bg=BACKGROUND_COLOR)
         shape_frame.pack(side=tk.LEFT, padx=20)
         
         tk.Label(shape_frame, text="Shapes:", bg=BACKGROUND_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT)
         
         # Create a dropdown for shapes so kids can pick easily
         self.shape_var = tk.StringVar(self.root)
-        self.shape_var.set(AVAILABLE_SHAPES[0]) # default
+        self.shape_var.set(AVAILABLE_CHARACTERS[0]) # default
         
-        shape_menu = tk.OptionMenu(shape_frame, self.shape_var, *AVAILABLE_SHAPES, command=self.set_shape)
-        shape_menu.config(font=("Arial", 10))
-        shape_menu.pack(side=tk.LEFT)
+        self.shape_menu = tk.OptionMenu(shape_frame, self.shape_var, *AVAILABLE_CHARACTERS, command=self.set_shape)
+        self.shape_menu.config(font=("Arial", 10))
+        self.shape_menu.pack(side=tk.LEFT)
             
         # Actions
-        actions_frame = tk.Frame(self.control_panel, bg=BACKGROUND_COLOR)
+        actions_frame = tk.Frame(self.toolbar_frame, bg=BACKGROUND_COLOR)
         actions_frame.pack(side=tk.LEFT, padx=20)
         
         self.btn_clear = tk.Button(actions_frame, text="Clear Board", font=("Arial", 10, "bold"),
@@ -69,16 +87,106 @@ class KarelUI:
         self.btn_play.pack(side=tk.LEFT, padx=5)
         
         # Submission Text!
-        sub_frame = tk.Frame(self.control_panel, bg=BACKGROUND_COLOR)
+        sub_frame = tk.Frame(self.toolbar_frame, bg=BACKGROUND_COLOR)
         sub_frame.pack(side=tk.RIGHT, padx=10)
         tk.Label(sub_frame, text="Submission by Anshuman Singh", bg=BACKGROUND_COLOR, 
                  font=("Arial", 10, "italic"), fg="#4B5563").pack()
+                 
+        # --- AI Toolbar Components ---
+        tk.Label(self.ai_frame, text="API Key:", bg=BACKGROUND_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(5,2))
+        self.api_entry = tk.Entry(self.ai_frame, width=25, show="*")
+        self.api_entry.pack(side=tk.LEFT, padx=2)
+        import os
+        if "GEMINI_API_KEY" in os.environ:
+            self.api_entry.insert(0, os.environ["GEMINI_API_KEY"])
+
+        tk.Label(self.ai_frame, text="Describe:", bg=BACKGROUND_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(15,2))
+        self.desc_entry = tk.Entry(self.ai_frame, width=35)
+        self.desc_entry.pack(side=tk.LEFT, padx=2)
+        self.desc_entry.bind("<KeyRelease>", self.update_ai_btn)
+
+        self.gen_btn = tk.Button(self.ai_frame, text="Cancel", font=("Arial", 10, "bold"), bg="#EF4444", fg="white", command=self.handle_ai_btn)
+        self.gen_btn.pack(side=tk.LEFT, padx=10)
+        
+        self.status_lbl = tk.Label(self.ai_frame, text="", bg=BACKGROUND_COLOR, fg="blue", font=("Arial", 9))
+        self.status_lbl.pack(side=tk.LEFT, padx=10)
 
     def set_color(self, color_name):
         self.current_color = color_name
         
     def set_shape(self, shape_name):
-        self.current_shape = shape_name
+        if shape_name == "Generate with AI...":
+            # Swap to AI inline toolbar
+            self.toolbar_frame.pack_forget()
+            self.ai_frame.pack(fill=tk.X, expand=True)
+            self.status_lbl.config(text="")
+            self.desc_entry.delete(0, 'end')
+            self.update_ai_btn(None)
+            
+            # Revert the dropdown until generation is complete
+            self.shape_var.set(self.current_shape)
+        else:
+            self.current_shape = shape_name
+
+    def update_ai_btn(self, event):
+        if self.desc_entry.get().strip():
+            self.gen_btn.config(text="Enter", bg="#10B981") # Green means GO
+        else:
+            self.gen_btn.config(text="Cancel", bg="#EF4444") # Red means Stop/Cancel
+
+    def handle_ai_btn(self):
+        desc = self.desc_entry.get().strip()
+        if not desc:
+            # Cancel: Restore toolbar
+            self.ai_frame.pack_forget()
+            self.toolbar_frame.pack(fill=tk.X, expand=True)
+        else:
+            # Enter: Generate!
+            api_key = self.api_entry.get().strip()
+            self.gen_btn.config(state=tk.DISABLED)
+            self.desc_entry.config(state=tk.DISABLED)
+            self.status_lbl.config(text="Generating... Please wait.", fg="blue")
+            threading.Thread(target=self.do_generate_shape, args=(api_key, desc), daemon=True).start()
+
+    def do_generate_shape(self, api_key, desc):
+        try:
+            # Generate the code
+            raw_code = generate_shape_code(api_key, desc)
+            if raw_code.startswith("ERROR:"):
+                self.root.after(0, lambda: self.finish_generation(False, raw_code))
+                return
+                
+            self.root.after(0, lambda: self.status_lbl.config(text="Saving and loading character..."))
+            
+            # Save it and load it into the registry
+            filepath = save_and_load_shape(desc, raw_code)
+            
+            self.root.after(0, lambda: self.finish_generation(True, f"Success! Saved to {filepath}"))
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.finish_generation(False, f"Error: {str(e)}"))
+
+    def finish_generation(self, success, message):
+        self.gen_btn.config(state=tk.NORMAL)
+        self.desc_entry.config(state=tk.NORMAL)
+        if success:
+            # Restore toolbar
+            self.ai_frame.pack_forget()
+            self.toolbar_frame.pack(fill=tk.X, expand=True)
+            
+            # Update the dropdown menu!
+            menu = self.shape_menu["menu"]
+            menu.delete(0, "end")
+            for shape in AVAILABLE_CHARACTERS:
+                menu.add_command(label=shape, command=tk._setit(self.shape_var, shape, self.set_shape))
+            
+            # Select the newly generated shape
+            desc = self.desc_entry.get().strip()
+            self.shape_var.set(desc)
+            self.set_shape(desc)
+        else:
+            self.status_lbl.config(text=message, fg="red")
+            messagebox.showerror("Generation Error", message)
 
     def draw_grid(self, width, height, cell_size):
         """Draws the grid lines."""
@@ -143,7 +251,7 @@ class KarelUI:
             cy = (draw_row + 0.5) * cell_size
             
             # Draw the chosen shape!
-            draw_shape_by_name(self.canvas, cx, cy, cell_size, direction, color_hex, shape_name)
+            draw_character_by_name(self.canvas, cx, cy, cell_size, direction, color_hex, shape_name)
             
     def draw_speed_buttons(self, cell_size, cycle_heads):
         """Draws tiny buttons on the head of each loop to change speed."""

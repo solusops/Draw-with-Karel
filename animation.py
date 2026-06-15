@@ -82,7 +82,7 @@ def _step_loop(world, head, node_to_head):
     and shift their data to the next cell!
     """
     from path_finding import find_next_karel_in_line
-    from shapes import get_dir_delta
+    from character import get_dir_delta
     
     # First, gather all Karels that belong to this loop's head
     cells_in_loop = []

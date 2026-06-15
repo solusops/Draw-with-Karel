@@ -1,7 +1,7 @@
 # path_finding.py
 # This file contains the logic to figure out if our Karels are arranged in a loop!
 
-from shapes import get_dir_delta
+from character import get_dir_delta
 
 def find_next_karel_in_line(world, col, row, dx, dy):
     """

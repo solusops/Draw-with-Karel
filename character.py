@@ -1,10 +1,10 @@
-# shapes.py
-# This module contains the code to draw different shapes in our world.
-# Kids can easily add their own shapes here! Just create a new function
-# like 'draw_my_shape' and follow the examples below.
+# character.py
+# This module contains the code to draw different characters in our world.
+# Kids can easily add their own characters here! Just create a new function
+# like 'draw_my_character' and follow the examples below.
 #
-# Remember: The base shape should face "East" (Right). The rotate_point
-# function will automatically turn your shape when it faces North, West, or South!
+# Remember: The base character should face "East" (Right). The rotate_point
+# function will automatically turn your character when it faces North, West, or South!
 
 import tkinter as tk
 from colors import OUTLINE_COLOR
@@ -45,7 +45,7 @@ def rotate_point(x, y, direction):
         return -y, x
     return x, y
 
-# --- SHAPE DRAWING FUNCTIONS ---
+# --- CHARACTER DRAWING FUNCTIONS ---
 
 def draw_classic_karel(canvas, cx, cy, cell_size, direction, color_hex):
     """
@@ -166,16 +166,21 @@ def draw_stick_man(canvas, cx, cy, cell_size, direction, color_hex):
         leg_screen = [coord for pt in leg_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
         canvas.create_line(leg_screen, fill=OUTLINE_COLOR, width=line_width)
 
-# A master list of available shapes so the UI can cycle through them!
-AVAILABLE_SHAPES = ["Classic Karel", "Arrow", "Christmas Tree", "Stick Man"]
+# A master list of available characters so the UI can cycle through them!
+AVAILABLE_CHARACTERS = ["Classic Karel", "Arrow", "Christmas Tree", "Stick Man", "Generate with AI..."]
 
-def draw_shape_by_name(canvas, cx, cy, cell_size, direction, color_hex, shape_name):
-    """A helper function to draw the correct shape based on its name."""
-    if shape_name == "Arrow":
+# A dictionary to hold custom AI generated characters mapping: character_name -> function
+CUSTOM_CHARACTERS = {}
+
+def draw_character_by_name(canvas, cx, cy, cell_size, direction, color_hex, character_name):
+    """A helper function to draw the correct character based on its name."""
+    if character_name in CUSTOM_CHARACTERS:
+        CUSTOM_CHARACTERS[character_name](canvas, cx, cy, cell_size, direction, color_hex)
+    elif character_name == "Arrow":
         draw_arrow(canvas, cx, cy, cell_size, direction, color_hex)
-    elif shape_name == "Christmas Tree":
+    elif character_name == "Christmas Tree":
         draw_christmas_tree(canvas, cx, cy, cell_size, direction, color_hex)
-    elif shape_name == "Stick Man":
+    elif character_name == "Stick Man":
         draw_stick_man(canvas, cx, cy, cell_size, direction, color_hex)
     else:
         draw_classic_karel(canvas, cx, cy, cell_size, direction, color_hex)

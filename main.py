@@ -6,7 +6,7 @@ import tkinter as tk
 from world import World
 from animation import AnimationState, advance_simulation, toggle_loop_speed
 from ui import KarelUI
-from shapes import get_next_direction
+from character import get_next_direction
 from path_finding import detect_loops_and_chains
 
 class KarelApp:
