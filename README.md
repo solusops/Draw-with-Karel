@@ -1,11 +1,11 @@
 # Draw with Karel
 
-Welcome to **Draw with Karel**, a beginner-friendly simulation built for **Code-in-Place**! 
-This project has been modularized so that new programmers can easily read, understand, and tweak the code.
+Welcome to **Draw with Karel**, final project submission for **Code-in-Place**! 
+This project is modular so that new programmers can easily read, understand, and tweak the code.
 
 ## How the World Works
 
-This is a grid-based puzzle and simulation game.
+This is a grid-based painting game.
 - You place "Karels" (or other characters) on the grid.
 - Each character has a direction it is facing.
 - If you arrange the characters so they point to each other in a closed loop (or a "chain" that leads into a loop), you can press **Play** to watch them physically slide around the track!
@@ -20,7 +20,6 @@ This is a grid-based puzzle and simulation game.
 - **Scroll Wheel**: Zoom in or out to make the grid larger or smaller.
 - **Play Button**: Start the animation!
 - **Speed Button**: When the animation is playing, a tiny button appears on the top-left-most cell of any valid loop. Click it to cycle the speed (> Slow, >> Fast, >>> Super Fast).
-- **Export / Import**: Use the 💾 and 📂 buttons to instantly save and load your board configurations to `config.json`.
 
 ## Code Structure
 
