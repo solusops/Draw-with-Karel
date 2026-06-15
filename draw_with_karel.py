@@ -52,8 +52,8 @@ class KarelDrawingApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Draw with Karel")
-        self.root.geometry("900x700")
-        self.root.minsize(700, 500)
+        self.root.geometry("950x700")
+        self.root.minsize(750, 500)
         
         # State variables
         self.grid_size = 10
@@ -61,6 +61,9 @@ class KarelDrawingApp:
         self.selected_color = "Red"
         self.dark_mode = False
         self.click_timer = None
+        self.drag_start = None
+        self.is_dragging = False
+        self.is_playing = False
         
         # GUI frames setup
         self.setup_ui()
@@ -70,6 +73,8 @@ class KarelDrawingApp:
         self.canvas.bind("<Configure>", lambda e: self.redraw())
         self.canvas.bind("<Button-1>", self.handle_click)
         self.canvas.bind("<Double-Button-1>", self.handle_double_click)
+        self.canvas.bind("<B1-Motion>", self.handle_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.handle_release)
         
         # Cross-platform mouse wheel bindings
         self.canvas.bind("<MouseWheel>", self.handle_mouse_wheel)
@@ -151,8 +156,11 @@ class KarelDrawingApp:
         self.color_status_lbl.pack(anchor=tk.W, pady=(5, 0))
         
         # Actions Frame
-        self.action_frame = tk.LabelFrame(self.sidebar, text="Actions", font=("Segoe UI", 9, "bold"), padx=10, pady=10)
+        self.action_frame = tk.LabelFrame(self.sidebar, text="Actions & Simulation", font=("Segoe UI", 9, "bold"), padx=10, pady=10)
         self.action_frame.pack(fill=tk.X, padx=15, pady=5)
+        
+        self.play_btn = tk.Button(self.action_frame, text="▶ Play Simulation", font=("Segoe UI", 9, "bold"), fg="#10B981", command=self.toggle_play)
+        self.play_btn.pack(fill=tk.X, pady=3)
         
         self.import_btn = tk.Button(self.action_frame, text="Import Python File", font=("Segoe UI", 9), command=self.import_file)
         self.import_btn.pack(fill=tk.X, pady=3)
@@ -172,7 +180,8 @@ class KarelDrawingApp:
         
         help_text = (
             "🖱️ Scroll Wheel:\nZoom / Adjust grid size\n\n"
-            "🖱️ Left Click:\nPlace robot (on empty cell) or\nRotate robot (90° turn)\n\n"
+            "🖱️ Left Click:\nPlace robot / Rotate robot\n\n"
+            "🖱️ Click & Drag:\nPaint cells with robots\n\n"
             "🖱️ Double-Click:\nRemove robot from cell"
         )
         self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.NW, font=("Segoe UI", 8))
@@ -191,7 +200,6 @@ class KarelDrawingApp:
         self.update_color_buttons_highlight()
         
     def update_color_buttons_highlight(self):
-        # Highlight active color button border
         for name, btn in self.color_buttons.items():
             if name == self.selected_color:
                 btn.config(relief=tk.SUNKEN, bd=2, highlightbackground="#1F2937", highlightcolor="#1F2937")
@@ -235,9 +243,15 @@ class KarelDrawingApp:
         
         # Actions Panel
         self.action_frame.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        for btn in [self.import_btn, self.export_btn, self.copy_btn]:
-            btn.config(bg=theme["button_bg"], fg=theme["button_fg"], activebackground=theme["active_button_bg"], activeforeground=theme["button_fg"], relief=tk.GROOVE, bd=1)
-        self.clear_btn.config(bg=theme["button_bg"], activebackground=theme["active_button_bg"], relief=tk.GROOVE, bd=1)
+        for btn in [self.import_btn, self.export_btn, self.copy_btn, self.play_btn]:
+            btn.config(bg=theme["button_bg"], activebackground=theme["active_button_bg"], relief=tk.GROOVE, bd=1)
+            
+        if self.is_playing:
+            self.play_btn.config(fg="#EF4444", activeforeground="#EF4444")
+        else:
+            self.play_btn.config(fg="#10B981", activeforeground="#10B981")
+            
+        self.clear_btn.config(bg=theme["button_bg"], fg="#EF4444", activebackground=theme["active_button_bg"], activeforeground="#EF4444", relief=tk.GROOVE, bd=1)
         
         # Help Panel
         self.help_frame.config(bg=theme["sidebar_bg"], fg=theme["text"])
@@ -256,7 +270,6 @@ class KarelDrawingApp:
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         
-        # Tkinter window size is 1x1 on first render before geometry propagation
         if w <= 1 or h <= 1:
             return
             
@@ -267,12 +280,10 @@ class KarelDrawingApp:
         
         # 1. Draw Grid Lines
         for i in range(self.grid_size + 1):
-            # Vertical
             self.canvas.create_line(i * cell_w, 0, i * cell_w, h, fill=theme["grid_line"], width=1)
-            # Horizontal
             self.canvas.create_line(0, i * cell_h, w, i * cell_h, fill=theme["grid_line"], width=1)
             
-        # 2. Draw Karels (only those inside the current visible grid bounds)
+        # 2. Draw Karels
         S = min(cell_w, cell_h)
         for (col, row), data in self.karels.items():
             if col < self.grid_size and row < self.grid_size:
@@ -298,65 +309,38 @@ class KarelDrawingApp:
     def draw_karel(self, cx, cy, S, direction, color_hex):
         theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
         outline_color = theme["karel_outline"]
-        head_color = theme["karel_head"]
         
-        # local coordinates for East representation (S is bounding dimension)
-        # Body
-        body_pts = [(-0.25, -0.25), (0.15, -0.25), (0.15, 0.25), (-0.25, 0.25)]
+        line_width = max(2, int(S * 0.06))
+        
+        # Body: Classic beveled card shape
+        body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
         body_rot = [self.rotate_point(x, y, direction) for x, y in body_pts]
         body_screen = [coord for pt in body_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(body_screen, fill=color_hex, outline=outline_color, width=2)
+        self.canvas.create_polygon(body_screen, fill=color_hex, outline=outline_color, width=line_width)
         
-        # Head
-        head_pts = [(0.15, -0.15), (0.32, -0.15), (0.32, 0.15), (0.15, 0.15)]
-        head_rot = [self.rotate_point(x, y, direction) for x, y in head_pts]
-        head_screen = [coord for pt in head_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(head_screen, fill=head_color, outline=outline_color, width=2)
+        # Screen: Vertical rectangular screen
+        screen_pts = [(-0.12, -0.22), (0.12, -0.22), (0.12, 0.08), (-0.12, 0.08)]
+        screen_rot = [self.rotate_point(x, y, direction) for x, y in screen_pts]
+        screen_screen = [coord for pt in screen_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_polygon(screen_screen, fill="#FFFFFF" if not self.dark_mode else "#1F2937", outline=outline_color, width=max(1, line_width // 2))
         
-        # Treads
-        tread1_pts = [(-0.2, -0.32), (0.1, -0.32), (0.1, -0.25), (-0.2, -0.25)]
-        tread1_rot = [self.rotate_point(x, y, direction) for x, y in tread1_pts]
-        tread1_screen = [coord for pt in tread1_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(tread1_screen, fill="#374151", outline=outline_color, width=2)
+        # Mouth: Horizontal line below screen
+        mouth_pts = [(-0.06, 0.18), (0.06, 0.18)]
+        mouth_rot = [self.rotate_point(x, y, direction) for x, y in mouth_pts]
+        mouth_screen = [coord for pt in mouth_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_line(mouth_screen[0], mouth_screen[1], mouth_screen[2], mouth_screen[3], fill=outline_color, width=max(1.5, line_width // 2))
         
-        tread2_pts = [(-0.2, 0.25), (0.1, 0.25), (0.1, 0.32), (-0.2, 0.32)]
-        tread2_rot = [self.rotate_point(x, y, direction) for x, y in tread2_pts]
-        tread2_screen = [coord for pt in tread2_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(tread2_screen, fill="#374151", outline=outline_color, width=2)
+        # Left foot: L-shape sticking out leftwards and down
+        left_foot_pts = [(-0.25, 0.08), (-0.35, 0.08), (-0.35, 0.18)]
+        left_foot_rot = [self.rotate_point(x, y, direction) for x, y in left_foot_pts]
+        left_foot_screen = [coord for pt in left_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_line(left_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
         
-        # Antenna stem & bulb
-        stem_pts = [(-0.08, -0.1), (-0.16, -0.38)]
-        stem_rot = [self.rotate_point(x, y, direction) for x, y in stem_pts]
-        stem_screen = [coord for pt in stem_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_line(stem_screen[0], stem_screen[1], stem_screen[2], stem_screen[3], fill=outline_color, width=2)
-        
-        bulb_cx, bulb_cy = self.rotate_point(-0.16, -0.38, direction)
-        bcx = cx + bulb_cx * S
-        bcy = cy + bulb_cy * S
-        br = 0.04 * S
-        self.canvas.create_oval(bcx - br, bcy - br, bcx + br, bcy + br, fill=color_hex, outline=outline_color, width=1)
-        
-        # Eyes
-        eye_radius = 0.03 * S
-        pupil_radius = 0.012 * S
-        for ex, ey in [(0.24, -0.06), (0.24, 0.06)]:
-            # White part
-            rx, ry = self.rotate_point(ex, ey, direction)
-            ecx = cx + rx * S
-            ecy = cy + ry * S
-            self.canvas.create_oval(ecx - eye_radius, ecy - eye_radius, ecx + eye_radius, ecy + eye_radius, fill="#FFFFFF", outline=outline_color, width=1)
-            
-            # Pupil (slanted forward for focus)
-            px, py = self.rotate_point(ex + 0.015, ey, direction)
-            pcx = cx + px * S
-            pcy = cy + py * S
-            self.canvas.create_oval(pcx - pupil_radius, pcy - pupil_radius, pcx + pupil_radius, pcy + pupil_radius, fill="#000000", outline="", width=0)
-            
-        # Direction indicator (Arrow inside body)
-        arrow_pts = [(-0.12, -0.08), (-0.12, 0.08), (0.04, 0)]
-        arrow_rot = [self.rotate_point(x, y, direction) for x, y in arrow_pts]
-        arrow_screen = [coord for pt in arrow_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(arrow_screen, fill="#FFFFFF", outline=outline_color, width=1)
+        # Bottom foot: L-shape sticking out downwards and right
+        bottom_foot_pts = [(0.08, 0.35), (0.08, 0.45), (0.18, 0.45)]
+        bottom_foot_rot = [self.rotate_point(x, y, direction) for x, y in bottom_foot_pts]
+        bottom_foot_screen = [coord for pt in bottom_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_line(bottom_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
 
     # --- Mouse Event Handlers ---
     def get_cell_coords(self, click_x, click_y):
@@ -375,10 +359,15 @@ class KarelDrawingApp:
             self.click_timer = None
             return
             
+        self.drag_start = (event.x, event.y)
+        self.is_dragging = False
         self.click_timer = self.root.after(200, lambda: self.execute_single_click(event))
 
     def execute_single_click(self, event):
         self.click_timer = None
+        if self.is_dragging:
+            return
+            
         col, row = self.get_cell_coords(event.x, event.y)
         
         if (col, row) in self.karels:
@@ -396,6 +385,33 @@ class KarelDrawingApp:
             
         self.redraw()
 
+    def handle_drag(self, event):
+        if self.drag_start is None:
+            return
+            
+        dx = event.x - self.drag_start[0]
+        dy = event.y - self.drag_start[1]
+        
+        # Check drag threshold (5 pixels)
+        if (dx*dx + dy*dy) > 25:
+            self.is_dragging = True
+            if self.click_timer is not None:
+                self.root.after_cancel(self.click_timer)
+                self.click_timer = None
+                
+        if self.is_dragging:
+            col, row = self.get_cell_coords(event.x, event.y)
+            if (col, row) not in self.karels:
+                self.karels[(col, row)] = {
+                    "direction": "East",
+                    "color": self.selected_color
+                }
+                self.redraw()
+
+    def handle_release(self, event):
+        self.drag_start = None
+        self.is_dragging = False
+
     def handle_double_click(self, event):
         if self.click_timer is not None:
             self.root.after_cancel(self.click_timer)
@@ -407,9 +423,6 @@ class KarelDrawingApp:
             self.redraw()
 
     def handle_mouse_wheel(self, event):
-        # Determine scroll direction
-        # Windows/macOS: event.delta
-        # Linux: event.num (4=up, 5=down)
         change = 0
         if event.num == 4 or (event.delta and event.delta > 0):
             change = 1
@@ -437,6 +450,104 @@ class KarelDrawingApp:
             self.karels.clear()
             self.redraw()
 
+    # --- Simulation Logic ---
+    def toggle_play(self):
+        self.is_playing = not self.is_playing
+        if self.is_playing:
+            self.play_btn.config(text="⏸ Pause Simulation", fg="#EF4444")
+            self.animate_tick()
+        else:
+            self.play_btn.config(text="▶ Play Simulation", fg="#10B981")
+        self.apply_theme() # Refresh sidebar color highlights
+
+    def animate_tick(self):
+        if not self.is_playing:
+            return
+            
+        self.run_simulation_step()
+        self.root.after(500, self.animate_tick)
+
+    def get_dir_delta(self, direction):
+        if direction == "East": return 1, 0
+        elif direction == "West": return -1, 0
+        elif direction == "North": return 0, -1
+        elif direction == "South": return 0, 1
+        return 0, 0
+
+    def run_simulation_step(self):
+        # 1. Cycle detection (find loops >= 4)
+        moving = set()
+        visited_global = set()
+        
+        for start in list(self.karels.keys()):
+            if start in visited_global:
+                continue
+            path = []
+            visited_local = {}
+            curr = start
+            
+            while curr in self.karels:
+                if curr in visited_local:
+                    cycle_start_idx = visited_local[curr]
+                    cycle = path[cycle_start_idx:]
+                    if len(cycle) >= 4:
+                        for node in cycle:
+                            moving.add(node)
+                    break
+                if curr in visited_global:
+                    break
+                
+                visited_local[curr] = len(path)
+                path.append(curr)
+                
+                # Next node (with grid boundary wrapping)
+                col, row = curr
+                data = self.karels[curr]
+                dx, dy = self.get_dir_delta(data["direction"])
+                curr = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                
+            for node in path:
+                visited_global.add(node)
+                
+        # 2. Propagation (head-to-back chain)
+        changed = True
+        while changed:
+            changed = False
+            for pos, data in self.karels.items():
+                if pos in moving:
+                    continue
+                
+                col, row = pos
+                direction = data["direction"]
+                dx, dy = self.get_dir_delta(direction)
+                front_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                
+                if front_pos in moving:
+                    front_data = self.karels[front_pos]
+                    # Direct head-to-back matching direction
+                    if front_data["direction"] == direction:
+                        moving.add(pos)
+                        changed = True
+                        
+        # 3. Apply steps simultaneously
+        if not moving:
+            return
+            
+        new_karels = {}
+        for pos, data in self.karels.items():
+            if pos not in moving:
+                new_karels[pos] = data
+                
+        for pos in moving:
+            col, row = pos
+            data = self.karels[pos]
+            dx, dy = self.get_dir_delta(data["direction"])
+            next_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+            new_karels[next_pos] = data
+            
+        self.karels = new_karels
+        self.redraw()
+
     # --- Import / Export Logic ---
     def generate_code_string(self):
         karels_list = []
@@ -448,7 +559,6 @@ class KarelDrawingApp:
                 "color": data["color"]
             })
             
-        # Format the KARELS list nicely with indentations
         karels_formatted_lines = []
         for k in karels_list:
             karels_formatted_lines.append(f'    {{"x": {k["x"]}, "y": {k["y"]}, "direction": "{k["direction"]}", "color": "{k["color"]}"}},')
@@ -468,11 +578,12 @@ class KarelStaticViewer:
     def __init__(self, root, grid_size, karels):
         self.root = root
         self.root.title("Karel Drawing Viewer")
-        self.root.geometry("600x600")
-        self.root.minsize(400, 400)
+        self.root.geometry("650x700")
+        self.root.minsize(450, 500)
         
         self.grid_size = grid_size
         self.karels = {{(k["x"], k["y"]): {{"direction": k["direction"], "color": k["color"]}} for k in karels}}
+        self.is_playing = False
         
         # Palettes for rendering
         self.color_palette = {{
@@ -480,10 +591,118 @@ class KarelStaticViewer:
             "Purple": "#8B5CF6", "Orange": "#F97316", "Pink": "#EC4899", "Cyan": "#06B6D4"
         }}
         
+        # Canvas Layout
         self.canvas = tk.Canvas(self.root, bg="#FAF9F6", highlightthickness=0, bd=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+        
+        # Control bar at bottom
+        self.control_frame = tk.Frame(self.root, bg="#F3F4F6", height=50)
+        self.control_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=(0, 10))
+        
+        self.play_btn = tk.Button(
+            self.control_frame, 
+            text="▶ Play Simulation", 
+            font=("Segoe UI", 10, "bold"), 
+            fg="#10B981", 
+            command=self.toggle_play,
+            relief=tk.GROOVE,
+            bd=1
+        )
+        self.play_btn.pack(side=tk.LEFT, padx=15, pady=5)
+        
+        self.info_lbl = tk.Label(
+            self.control_frame, 
+            text=f"Grid: {{self.grid_size}}x{{self.grid_size}} | Karels: {{len(self.karels)}}", 
+            font=("Segoe UI", 9, "bold"),
+            bg="#F3F4F6",
+            fg="#4B5563"
+        )
+        self.info_lbl.pack(side=tk.RIGHT, padx=15, pady=5)
         
         self.canvas.bind("<Configure>", lambda e: self.draw())
+        
+    def toggle_play(self):
+        self.is_playing = not self.is_playing
+        if self.is_playing:
+            self.play_btn.config(text="⏸ Pause Simulation", fg="#EF4444")
+            self.animate_tick()
+        else:
+            self.play_btn.config(text="▶ Play Simulation", fg="#10B981")
+            
+    def animate_tick(self):
+        if not self.is_playing:
+            return
+        self.run_simulation_step()
+        self.root.after(500, self.animate_tick)
+        
+    def get_dir_delta(self, direction):
+        if direction == "East": return 1, 0
+        elif direction == "West": return -1, 0
+        elif direction == "North": return 0, -1
+        elif direction == "South": return 0, 1
+        return 0, 0
+        
+    def run_simulation_step(self):
+        moving = set()
+        visited_global = set()
+        for start in list(self.karels.keys()):
+            if start in visited_global:
+                continue
+            path = []
+            visited_local = {{}}
+            curr = start
+            while curr in self.karels:
+                if curr in visited_local:
+                    cycle_start_idx = visited_local[curr]
+                    cycle = path[cycle_start_idx:]
+                    if len(cycle) >= 4:
+                        for node in cycle:
+                            moving.add(node)
+                    break
+                if curr in visited_global:
+                    break
+                visited_local[curr] = len(path)
+                path.append(curr)
+                col, row = curr
+                data = self.karels[curr]
+                dx, dy = self.get_dir_delta(data["direction"])
+                curr = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+            for node in path:
+                visited_global.add(node)
+                
+        changed = True
+        while changed:
+            changed = False
+            for pos, data in self.karels.items():
+                if pos in moving:
+                    continue
+                col, row = pos
+                direction = data["direction"]
+                dx, dy = self.get_dir_delta(direction)
+                front_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+                if front_pos in moving:
+                    front_data = self.karels[front_pos]
+                    if front_data["direction"] == direction:
+                        moving.add(pos)
+                        changed = True
+                        
+        if not moving:
+            return
+            
+        new_karels = {{}}
+        for pos, data in self.karels.items():
+            if pos not in moving:
+                new_karels[pos] = data
+        for pos in moving:
+            col, row = pos
+            data = self.karels[pos]
+            dx, dy = self.get_dir_delta(data["direction"])
+            next_pos = ((col + dx) % self.grid_size, (row + dy) % self.grid_size)
+            new_karels[next_pos] = data
+            
+        self.karels = new_karels
+        self.draw()
+        self.info_lbl.config(text=f"Grid: {{self.grid_size}}x{{self.grid_size}} | Karels: {{len(self.karels)}}")
         
     def draw(self):
         self.canvas.delete("all")
@@ -521,62 +740,37 @@ class KarelStaticViewer:
         
     def draw_karel(self, cx, cy, S, direction, color_hex):
         outline_color = "#1F2937"
-        head_color = "#D1D5DB"
+        line_width = max(2, int(S * 0.06))
         
         # Body
-        body_pts = [(-0.25, -0.25), (0.15, -0.25), (0.15, 0.25), (-0.25, 0.25)]
+        body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
         body_rot = [self.rotate_point(x, y, direction) for x, y in body_pts]
         body_screen = [coord for pt in body_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(body_screen, fill=color_hex, outline=outline_color, width=2)
+        self.canvas.create_polygon(body_screen, fill=color_hex, outline=outline_color, width=line_width)
         
-        # Head
-        head_pts = [(0.15, -0.15), (0.32, -0.15), (0.32, 0.15), (0.15, 0.15)]
-        head_rot = [self.rotate_point(x, y, direction) for x, y in head_pts]
-        head_screen = [coord for pt in head_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(head_screen, fill=head_color, outline=outline_color, width=2)
+        # Screen
+        screen_pts = [(-0.12, -0.22), (0.12, -0.22), (0.12, 0.08), (-0.12, 0.08)]
+        screen_rot = [self.rotate_point(x, y, direction) for x, y in screen_pts]
+        screen_screen = [coord for pt in screen_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_polygon(screen_screen, fill="#FFFFFF", outline=outline_color, width=max(1, line_width//2))
         
-        # Treads
-        tread1_pts = [(-0.2, -0.32), (0.1, -0.32), (0.1, -0.25), (-0.2, -0.25)]
-        tread1_rot = [self.rotate_point(x, y, direction) for x, y in tread1_pts]
-        tread1_screen = [coord for pt in tread1_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(tread1_screen, fill="#374151", outline=outline_color, width=2)
+        # Mouth
+        mouth_pts = [(-0.06, 0.18), (0.06, 0.18)]
+        mouth_rot = [self.rotate_point(x, y, direction) for x, y in mouth_pts]
+        mouth_screen = [coord for pt in mouth_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_line(mouth_screen[0], mouth_screen[1], mouth_screen[2], mouth_screen[3], fill=outline_color, width=max(1.5, line_width//2))
         
-        tread2_pts = [(-0.2, 0.25), (0.1, 0.25), (0.1, 0.32), (-0.2, 0.32)]
-        tread2_rot = [self.rotate_point(x, y, direction) for x, y in tread2_pts]
-        tread2_screen = [coord for pt in tread2_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(tread2_screen, fill="#374151", outline=outline_color, width=2)
+        # Left foot
+        left_foot_pts = [(-0.25, 0.08), (-0.35, 0.08), (-0.35, 0.18)]
+        left_foot_rot = [self.rotate_point(x, y, direction) for x, y in left_foot_pts]
+        left_foot_screen = [coord for pt in left_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_line(left_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
         
-        # Antenna stem & bulb
-        stem_pts = [(-0.08, -0.1), (-0.16, -0.38)]
-        stem_rot = [self.rotate_point(x, y, direction) for x, y in stem_pts]
-        stem_screen = [coord for pt in stem_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_line(stem_screen[0], stem_screen[1], stem_screen[2], stem_screen[3], fill=outline_color, width=2)
-        
-        bulb_cx, bulb_cy = self.rotate_point(-0.16, -0.38, direction)
-        bcx = cx + bulb_cx * S
-        bcy = cy + bulb_cy * S
-        br = 0.04 * S
-        self.canvas.create_oval(bcx - br, bcy - br, bcx + br, bcy + br, fill=color_hex, outline=outline_color, width=1)
-        
-        # Eyes
-        eye_radius = 0.03 * S
-        pupil_radius = 0.012 * S
-        for ex, ey in [(0.24, -0.06), (0.24, 0.06)]:
-            rx, ry = self.rotate_point(ex, ey, direction)
-            ecx = cx + rx * S
-            ecy = cy + ry * S
-            self.canvas.create_oval(ecx - eye_radius, ecy - eye_radius, ecx + eye_radius, ecy + eye_radius, fill="#FFFFFF", outline=outline_color, width=1)
-            
-            px, py = self.rotate_point(ex + 0.015, ey, direction)
-            pcx = cx + px * S
-            pcy = cy + py * S
-            self.canvas.create_oval(pcx - pupil_radius, pcy - pupil_radius, pcx + pupil_radius, pcy + pupil_radius, fill="#000000", outline="", width=0)
-            
-        # Direction arrow
-        arrow_pts = [(-0.12, -0.08), (-0.12, 0.08), (0.04, 0)]
-        arrow_rot = [self.rotate_point(x, y, direction) for x, y in arrow_pts]
-        arrow_screen = [coord for pt in arrow_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(arrow_screen, fill="#FFFFFF", outline=outline_color, width=1)
+        # Bottom foot
+        bottom_foot_pts = [(0.08, 0.35), (0.08, 0.45), (0.18, 0.45)]
+        bottom_foot_rot = [self.rotate_point(x, y, direction) for x, y in bottom_foot_pts]
+        bottom_foot_screen = [coord for pt in bottom_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_line(bottom_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
 
 if __name__ == "__main__":
     root = tk.Tk()
@@ -624,7 +818,6 @@ if __name__ == "__main__":
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
                 
-            # Parse variables using Regex & AST for safety (instead of exec/eval)
             grid_size_match = re.search(r"^GRID_SIZE\s*=\s*(\d+)", content, re.MULTILINE)
             if not grid_size_match:
                 raise ValueError("No GRID_SIZE variable found at top level.")
@@ -637,7 +830,6 @@ if __name__ == "__main__":
             karels_str = karels_match.group(1)
             imported_karels_list = ast.literal_eval(karels_str)
             
-            # Reconstruct dict format
             new_karels = {}
             for item in imported_karels_list:
                 x = int(item["x"])
@@ -647,7 +839,6 @@ if __name__ == "__main__":
                     "color": str(item["color"])
                 }
                 
-            # Update app state
             self.grid_size = imported_grid_size
             self.grid_slider.set(imported_grid_size)
             self.karels = new_karels
