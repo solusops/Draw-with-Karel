@@ -532,9 +532,11 @@ class KarelDrawingApp:
     def animate_tick(self):
         if not self.is_playing:
             return
-            
-        self.run_simulation_step()
-        self.root.after(50, self.animate_tick)  # Faster scheduling loop (50ms increments)
+        try:
+            self.run_simulation_step()
+        except Exception:
+            pass  # Never let the animation loop die
+        self.root.after(50, self.animate_tick)
 
     def get_dir_delta(self, direction):
         if direction == "East": return 1, 0
