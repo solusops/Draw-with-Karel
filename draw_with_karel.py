@@ -52,8 +52,8 @@ class KarelDrawingApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Draw with Karel")
-        self.root.geometry("950x700")
-        self.root.minsize(750, 500)
+        self.root.geometry("950x750")
+        self.root.minsize(750, 550)
         
         # State variables
         self.grid_size = 10
@@ -64,6 +64,7 @@ class KarelDrawingApp:
         self.drag_start = None
         self.is_dragging = False
         self.is_playing = False
+        self.sim_tick_count = 0  # Christmas blinking counter
         
         # GUI frames setup
         self.setup_ui()
@@ -82,16 +83,30 @@ class KarelDrawingApp:
         self.canvas.bind("<Button-5>", self.handle_mouse_wheel)
         
     def setup_ui(self):
-        # Main Layout: Canvas on the Left (expanding), Sidebar on the Right (fixed)
+        # Main Layout: Canvas Frame on the Left (expanding), Sidebar on the Right (fixed width)
         self.main_container = tk.Frame(self.root)
         self.main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Left container (Canvas)
+        # Left container (Canvas + Help underneath)
         self.canvas_frame = tk.Frame(self.main_container)
         self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         self.canvas = tk.Canvas(self.canvas_frame, highlightthickness=0, bd=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+        
+        # Help panel placed at the bottom of the canvas
+        self.help_frame = tk.LabelFrame(self.canvas_frame, text="Controls Help", font=("Segoe UI", 9, "bold"), padx=15, pady=8)
+        self.help_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        help_text = (
+            "🖱️ Scroll Wheel: Zoom / Adjust grid size\n"
+            "🖱️ Left Click:   Place robot (on empty cell)\n"
+            "                Rotate robot (90° turn on occupied cell)\n"
+            "🖱️ Click & Drag: Paint cells with robots\n"
+            "🖱️ Double-Click: Remove robot from cell"
+        )
+        self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.W, font=("Consolas", 9))
+        self.help_lbl.pack(fill=tk.X)
         
         # Right container (Sidebar)
         self.sidebar = tk.Frame(self.main_container, width=280)
@@ -174,19 +189,6 @@ class KarelDrawingApp:
         self.clear_btn = tk.Button(self.action_frame, text="Clear Board", font=("Segoe UI", 9), fg="#EF4444", command=self.clear_board)
         self.clear_btn.pack(fill=tk.X, pady=3)
         
-        # Help & Controls info
-        self.help_frame = tk.LabelFrame(self.sidebar, text="Controls Help", font=("Segoe UI", 9, "bold"), padx=10, pady=10)
-        self.help_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
-        
-        help_text = (
-            "🖱️ Scroll Wheel:\nZoom / Adjust grid size\n\n"
-            "🖱️ Left Click:\nPlace robot / Rotate robot\n\n"
-            "🖱️ Click & Drag:\nPaint cells with robots\n\n"
-            "🖱️ Double-Click:\nRemove robot from cell"
-        )
-        self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.NW, font=("Segoe UI", 8))
-        self.help_lbl.pack(fill=tk.BOTH, expand=True)
-        
         # Footer (Theme Toggle)
         self.footer_frame = tk.Frame(self.sidebar)
         self.footer_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=15, pady=10)
@@ -253,9 +255,9 @@ class KarelDrawingApp:
             
         self.clear_btn.config(bg=theme["button_bg"], fg="#EF4444", activebackground=theme["active_button_bg"], activeforeground="#EF4444", relief=tk.GROOVE, bd=1)
         
-        # Help Panel
-        self.help_frame.config(bg=theme["sidebar_bg"], fg=theme["text"])
-        self.help_lbl.config(bg=theme["sidebar_bg"], fg=theme["text_sec"])
+        # Bottom Help Panel colors
+        self.help_frame.config(bg=theme["bg"], fg=theme["text"])
+        self.help_lbl.config(bg=theme["bg"], fg=theme["text_sec"])
         
         # Footer
         self.footer_frame.config(bg=theme["sidebar_bg"])
@@ -289,7 +291,7 @@ class KarelDrawingApp:
             if col < self.grid_size and row < self.grid_size:
                 cx = col * cell_w + cell_w / 2
                 cy = row * cell_h + cell_h / 2
-                self.draw_karel(cx, cy, S, data["direction"], COLOR_PALETTE[data["color"]])
+                self.draw_karel(cx, cy, S, data["direction"], COLOR_PALETTE[data["color"]], col, row)
                 
         # 3. Update Labels
         self.grid_size_lbl.config(text=f"Grid Size: {self.grid_size} x {self.grid_size}")
@@ -306,37 +308,44 @@ class KarelDrawingApp:
             return -y, x
         return x, y
 
-    def draw_karel(self, cx, cy, S, direction, color_hex):
+    def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0):
         theme = THEMES["dark"] if self.dark_mode else THEMES["light"]
         outline_color = theme["karel_outline"]
         
         line_width = max(2, int(S * 0.06))
         
+        # Screen Christmas light flashing effect (toggles colors Red and Green)
+        if self.is_playing:
+            state = (col + row + self.sim_tick_count) % 2
+            screen_fill = "#EF4444" if state == 0 else "#10B981"
+        else:
+            screen_fill = "#FFFFFF" if not self.dark_mode else "#1F2937"
+            
         # Body: Classic beveled card shape
         body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
         body_rot = [self.rotate_point(x, y, direction) for x, y in body_pts]
         body_screen = [coord for pt in body_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
         self.canvas.create_polygon(body_screen, fill=color_hex, outline=outline_color, width=line_width)
         
-        # Screen: Vertical rectangular screen
+        # Screen
         screen_pts = [(-0.12, -0.22), (0.12, -0.22), (0.12, 0.08), (-0.12, 0.08)]
         screen_rot = [self.rotate_point(x, y, direction) for x, y in screen_pts]
         screen_screen = [coord for pt in screen_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(screen_screen, fill="#FFFFFF" if not self.dark_mode else "#1F2937", outline=outline_color, width=max(1, line_width // 2))
+        self.canvas.create_polygon(screen_screen, fill=screen_fill, outline=outline_color, width=max(1, line_width // 2))
         
-        # Mouth: Horizontal line below screen
+        # Mouth
         mouth_pts = [(-0.06, 0.18), (0.06, 0.18)]
         mouth_rot = [self.rotate_point(x, y, direction) for x, y in mouth_pts]
         mouth_screen = [coord for pt in mouth_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
         self.canvas.create_line(mouth_screen[0], mouth_screen[1], mouth_screen[2], mouth_screen[3], fill=outline_color, width=max(1.5, line_width // 2))
         
-        # Left foot: L-shape sticking out leftwards and down
+        # Left foot
         left_foot_pts = [(-0.25, 0.08), (-0.35, 0.08), (-0.35, 0.18)]
         left_foot_rot = [self.rotate_point(x, y, direction) for x, y in left_foot_pts]
         left_foot_screen = [coord for pt in left_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
         self.canvas.create_line(left_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
         
-        # Bottom foot: L-shape sticking out downwards and right
+        # Bottom foot
         bottom_foot_pts = [(0.08, 0.35), (0.08, 0.45), (0.18, 0.45)]
         bottom_foot_rot = [self.rotate_point(x, y, direction) for x, y in bottom_foot_pts]
         bottom_foot_screen = [coord for pt in bottom_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
@@ -392,7 +401,6 @@ class KarelDrawingApp:
         dx = event.x - self.drag_start[0]
         dy = event.y - self.drag_start[1]
         
-        # Check drag threshold (5 pixels)
         if (dx*dx + dy*dy) > 25:
             self.is_dragging = True
             if self.click_timer is not None:
@@ -458,12 +466,13 @@ class KarelDrawingApp:
             self.animate_tick()
         else:
             self.play_btn.config(text="▶ Play Simulation", fg="#10B981")
-        self.apply_theme() # Refresh sidebar color highlights
+        self.apply_theme() # Refresh color settings
 
     def animate_tick(self):
         if not self.is_playing:
             return
             
+        self.sim_tick_count = (self.sim_tick_count + 1) % 2  # Alternate blinking state
         self.run_simulation_step()
         self.root.after(500, self.animate_tick)
 
@@ -524,13 +533,13 @@ class KarelDrawingApp:
                 
                 if front_pos in moving:
                     front_data = self.karels[front_pos]
-                    # Direct head-to-back matching direction
                     if front_data["direction"] == direction:
                         moving.add(pos)
                         changed = True
                         
         # 3. Apply steps simultaneously
         if not moving:
+            self.redraw() # Still redraw to animate blinking lights
             return
             
         new_karels = {}
@@ -578,12 +587,13 @@ class KarelStaticViewer:
     def __init__(self, root, grid_size, karels):
         self.root = root
         self.root.title("Karel Drawing Viewer")
-        self.root.geometry("650x700")
+        self.root.geometry("700x750")
         self.root.minsize(450, 500)
         
         self.grid_size = grid_size
         self.karels = {{(k["x"], k["y"]): {{"direction": k["direction"], "color": k["color"]}} for k in karels}}
         self.is_playing = False
+        self.sim_tick_count = 0
         
         # Palettes for rendering
         self.color_palette = {{
@@ -591,9 +601,26 @@ class KarelStaticViewer:
             "Purple": "#8B5CF6", "Orange": "#F97316", "Pink": "#EC4899", "Cyan": "#06B6D4"
         }}
         
-        # Canvas Layout
-        self.canvas = tk.Canvas(self.root, bg="#FAF9F6", highlightthickness=0, bd=0)
+        # Canvas Layout (Canvas Frame + Help underneath)
+        self.canvas_frame = tk.Frame(self.root)
+        self.canvas_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.canvas = tk.Canvas(self.canvas_frame, bg="#FAF9F6", highlightthickness=0, bd=0)
         self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+        
+        # Help Frame placed horizontally below canvas
+        self.help_frame = tk.LabelFrame(self.canvas_frame, text="Controls Help", font=("Segoe UI", 9, "bold"), padx=15, pady=8)
+        self.help_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        help_text = (
+            "🖱️ Scroll Wheel: Zoom / Adjust grid size\\n"
+            "🖱️ Left Click:   Place robot (on empty cell)\\n"
+            "                Rotate robot (90° turn on occupied cell)\\n"
+            "🖱️ Click & Drag: Paint cells with robots\\n"
+            "🖱️ Double-Click: Remove robot from cell"
+        )
+        self.help_lbl = tk.Label(self.help_frame, text=help_text, justify=tk.LEFT, anchor=tk.W, font=("Consolas", 9), bg="#FAF9F6", fg="#4B5563")
+        self.help_lbl.pack(fill=tk.X)
         
         # Control bar at bottom
         self.control_frame = tk.Frame(self.root, bg="#F3F4F6", height=50)
@@ -632,6 +659,7 @@ class KarelStaticViewer:
     def animate_tick(self):
         if not self.is_playing:
             return
+        self.sim_tick_count = (self.sim_tick_count + 1) % 2
         self.run_simulation_step()
         self.root.after(500, self.animate_tick)
         
@@ -687,6 +715,7 @@ class KarelStaticViewer:
                         changed = True
                         
         if not moving:
+            self.draw()
             return
             
         new_karels = {{}}
@@ -725,7 +754,7 @@ class KarelStaticViewer:
             if col < self.grid_size and row < self.grid_size:
                 cx = col * cell_w + cell_w / 2
                 cy = row * cell_h + cell_h / 2
-                self.draw_karel(cx, cy, S, data["direction"], self.color_palette.get(data["color"], "#EF4444"))
+                self.draw_karel(cx, cy, S, data["direction"], self.color_palette.get(data["color"], "#EF4444"), col, row)
                 
     def rotate_point(self, x, y, direction):
         if direction == "East":
@@ -738,10 +767,16 @@ class KarelStaticViewer:
             return -y, x
         return x, y
         
-    def draw_karel(self, cx, cy, S, direction, color_hex):
+    def draw_karel(self, cx, cy, S, direction, color_hex, col=0, row=0):
         outline_color = "#1F2937"
         line_width = max(2, int(S * 0.06))
         
+        if self.is_playing:
+            state = (col + row + self.sim_tick_count) % 2
+            screen_fill = "#EF4444" if state == 0 else "#10B981"
+        else:
+            screen_fill = "#FFFFFF"
+            
         # Body
         body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
         body_rot = [self.rotate_point(x, y, direction) for x, y in body_pts]
@@ -752,7 +787,7 @@ class KarelStaticViewer:
         screen_pts = [(-0.12, -0.22), (0.12, -0.22), (0.12, 0.08), (-0.12, 0.08)]
         screen_rot = [self.rotate_point(x, y, direction) for x, y in screen_pts]
         screen_screen = [coord for pt in screen_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(screen_screen, fill="#FFFFFF", outline=outline_color, width=max(1, line_width//2))
+        self.canvas.create_polygon(screen_screen, fill=screen_fill, outline=outline_color, width=max(1, line_width//2))
         
         # Mouth
         mouth_pts = [(-0.06, 0.18), (0.06, 0.18)]
