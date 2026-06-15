@@ -8,8 +8,10 @@ from colors import *
 from character import AVAILABLE_CHARACTERS, draw_character_by_name
 try:
     from ai_generator import generate_shape_code, save_and_load_shape
-except ImportError:
-    pass
+except ImportError as e:
+    generate_shape_code = None
+    save_and_load_shape = None
+    print(f"AI Generator disabled: {e}")
 
 class KarelUI:
     def __init__(self, root, world, anim_state):
@@ -129,6 +131,10 @@ class KarelUI:
             self.current_shape = shape_name
 
     def update_ai_btn(self, event):
+        # Only change text if we are not actively generating
+        if getattr(self, "is_generating", False):
+            return
+            
         if self.desc_entry.get().strip():
             self.gen_btn.config(text="Enter", bg="#10B981") # Green means GO
         else:
@@ -136,15 +142,31 @@ class KarelUI:
 
     def handle_ai_btn(self):
         desc = self.desc_entry.get().strip()
+        
+        # If we are currently generating, clicking the button cancels it!
+        if getattr(self, "is_generating", False):
+            self.is_generating = False
+            self.finish_generation(False, "Cancelled by user.")
+            return
+
         if not desc:
             # Cancel: Restore toolbar
             self.ai_frame.pack_forget()
             self.toolbar_frame.pack(fill=tk.X, expand=True)
         else:
+            if generate_shape_code is None:
+                messagebox.showerror("Module Error", "AI Generator is missing dependencies. Please 'uv pip install google-genai'.")
+                return
+                
             # Enter: Generate!
+            self.is_generating = True
             api_key = self.api_entry.get().strip()
-            self.gen_btn.config(state=tk.DISABLED)
+            
+            # Change the button to a Cancel button while generating
+            self.gen_btn.config(text="Cancel", bg="#EF4444")
             self.desc_entry.config(state=tk.DISABLED)
+            self.api_entry.config(state=tk.DISABLED)
+            
             self.status_lbl.config(text="Generating... Please wait.", fg="blue")
             threading.Thread(target=self.do_generate_shape, args=(api_key, desc), daemon=True).start()
 
@@ -152,8 +174,13 @@ class KarelUI:
         try:
             # Generate the code
             raw_code = generate_shape_code(api_key, desc)
+            
+            # If the user clicked Cancel while we were waiting for the API, abort!
+            if not getattr(self, "is_generating", False):
+                return
+                
             if raw_code.startswith("ERROR:"):
-                self.root.after(0, lambda: self.finish_generation(False, raw_code))
+                self.root.after(0, lambda msg=raw_code: self.finish_generation(False, msg))
                 return
                 
             self.root.after(0, lambda: self.status_lbl.config(text="Saving and loading character..."))
@@ -161,14 +188,20 @@ class KarelUI:
             # Save it and load it into the registry
             filepath = save_and_load_shape(desc, raw_code)
             
-            self.root.after(0, lambda: self.finish_generation(True, f"Success! Saved to {filepath}"))
+            if getattr(self, "is_generating", False):
+                self.root.after(0, lambda msg=f"Success! Saved to {filepath}": self.finish_generation(True, msg))
             
         except Exception as e:
-            self.root.after(0, lambda: self.finish_generation(False, f"Error: {str(e)}"))
+            if getattr(self, "is_generating", False):
+                err_msg = f"Error: {str(e)}"
+                self.root.after(0, lambda msg=err_msg: self.finish_generation(False, msg))
 
     def finish_generation(self, success, message):
-        self.gen_btn.config(state=tk.NORMAL)
+        self.is_generating = False
         self.desc_entry.config(state=tk.NORMAL)
+        self.api_entry.config(state=tk.NORMAL)
+        self.update_ai_btn(None)
+        
         if success:
             # Restore toolbar
             self.ai_frame.pack_forget()
