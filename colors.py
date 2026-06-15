@@ -21,7 +21,7 @@ SPEED_BURST_COLOR = "#FCA5A5"
 BACKGROUND_COLOR = "#FAF9F6"
 
 # The color of the lines drawing the grid
-GRID_LINE_COLOR = "#E5E7EB"
+GRID_LINE_COLOR = "#000000"
 
 # The color of the lines drawing the robots
 OUTLINE_COLOR = "#1F2937"

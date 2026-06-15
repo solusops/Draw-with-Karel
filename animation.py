@@ -121,3 +121,6 @@ def _step_loop(world, head, node_to_head):
     for pos in cells_in_loop:
         if pos in new_data:
             world.karels[pos] = new_data[pos]
+        else:
+            # If no Karel moved into this position (e.g. tail of a chain), it becomes empty!
+            del world.karels[pos]

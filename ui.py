@@ -237,8 +237,6 @@ class KarelUI:
 
     def draw_grid(self, width, height, cell_size):
         """Draws the grid lines."""
-        self.canvas.delete("all")
-        
         for col in range(self.world.grid_size + 1):
             x = col * cell_size
             self.canvas.create_line(x, 0, x, height, fill=GRID_LINE_COLOR, width=1)
@@ -286,12 +284,6 @@ class KarelUI:
                 # Slide smoothly to the next cell
                 draw_col = col + (dx * progress)
                 draw_row = row + (dy * progress)
-                
-                # Handle wrap-around visually (if it crosses the edge, it just appears on the other side)
-                # For simplicity, we just modulo the drawing coordinates. It might jump visually, 
-                # but that's perfectly fine for a beginner version!
-                draw_col = draw_col % self.world.logical_grid_size
-                draw_row = draw_row % self.world.logical_grid_size
 
             # Center of the cell
             cx = (draw_col + 0.5) * cell_size

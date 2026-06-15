@@ -6,24 +6,19 @@ from character import get_dir_delta
 def find_next_karel_in_line(world, col, row, dx, dy):
     """
     Looks forward in the direction (dx, dy) to find the next Karel.
-    Wraps around the screen like Pac-Man.
+    Stops at the edge of the board (No Pac-Man).
     """
-    curr_col = (col + dx) % world.logical_grid_size
-    curr_row = (row + dy) % world.logical_grid_size
+    curr_col = col + dx
+    curr_row = row + dy
     
-    # We use a simple counter to make sure we don't loop forever if the board is empty
-    steps_taken = 0
-    max_steps = world.logical_grid_size
-    
-    while steps_taken < max_steps:
+    while 0 <= curr_col < world.logical_grid_size and 0 <= curr_row < world.logical_grid_size:
         # Check if there is a Karel at this position
         if world.get_karel(curr_col, curr_row) is not None:
             return (curr_col, curr_row)
             
         # Move forward one more step
-        curr_col = (curr_col + dx) % world.logical_grid_size
-        curr_row = (curr_row + dy) % world.logical_grid_size
-        steps_taken = steps_taken + 1
+        curr_col += dx
+        curr_row += dy
         
     return None
 

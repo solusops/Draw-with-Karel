@@ -134,8 +134,13 @@ class KarelApp:
     def clear_board(self):
         """Clears everything instantly! No dialog boxes."""
         self.world.clear()
-        # Reset animation state
-        self.anim_state = AnimationState()
+        
+        # Reset animation state without replacing the object
+        self.anim_state.is_playing = False
+        self.anim_state.loop_speeds.clear()
+        self.anim_state.loop_accumulators.clear()
+        self.anim_state.visual_progress.clear()
+        
         self.ui.btn_play.config(text="Play", bg="#10B981")
         self.update_canvas()
 
@@ -196,14 +201,17 @@ class KarelApp:
             
         cell_size = min(width, height) / self.world.grid_size
         
-        # 1. Draw the background grid
-        self.ui.draw_grid(width, height, cell_size)
+        # Clear the canvas FIRST
+        self.ui.canvas.delete("all")
         
         # Find loops!
         cycles, node_to_head, cycle_heads = detect_loops_and_chains(self.world)
         
-        # 2. Draw the yellow highlight behind Karels in a loop
+        # 1. Draw the yellow highlight behind Karels in a loop
         self.ui.draw_loop_highlights(cell_size, cycles, node_to_head, cycle_heads)
+        
+        # 2. Draw the background grid (drawn ON TOP of yellow highlights)
+        self.ui.draw_grid(width, height, cell_size)
         
         # 3. Draw the Karels themselves
         self.ui.draw_karels(cell_size, node_to_head, cycle_heads)
