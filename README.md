@@ -38,6 +38,10 @@ This project is broken into several small Python files. This makes it easy for k
 
 ---
 
+https://github.com/user-attachments/assets/f6a4b604-bdef-4b78-8eb6-60b43ebd1574
+
+---
+
 ## How to Tweak the Code! (For Code-in-Place Students)
 
 Here are some fun challenges you can try:
