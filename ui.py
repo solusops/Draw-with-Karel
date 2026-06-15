@@ -2,7 +2,6 @@
 # This module handles drawing everything on the screen!
 
 import tkinter as tk
-from tkinter import messagebox
 import threading
 from colors import *
 from character import AVAILABLE_CHARACTERS, draw_character_by_name
@@ -95,12 +94,22 @@ class KarelUI:
                  font=("Arial", 10, "italic"), fg="#4B5563").pack()
                  
         # --- AI Toolbar Components ---
-        tk.Label(self.ai_frame, text="API Key:", bg=BACKGROUND_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(5,2))
+        tk.Label(self.ai_frame, text="API Key:", bg="#374151", fg="white", font=("Arial", 10)).pack(side=tk.LEFT, padx=(10, 5))
         self.api_entry = tk.Entry(self.ai_frame, width=25, show="*")
-        self.api_entry.pack(side=tk.LEFT, padx=2)
+        self.api_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Prevent copy/cut to protect the key
+        self.api_entry.bind("<Control-c>", lambda e: "break")
+        self.api_entry.bind("<Control-x>", lambda e: "break")
+        
+        # Obfuscated default key
+        obf = [118, 126, 77, 86, 100, 78, 115, 93, 7, 122, 94, 113, 99, 113, 125, 89, 91, 93, 110, 86, 80, 1, 96, 15, 66, 103, 100, 122, 124, 82, 15, 70, 122, 81, 70, 125, 2, 96, 122]
+        default_key = "".join(chr(c ^ 55) for c in obf)
+        
+        # Check if they have an env variable, otherwise use default
         import os
-        if "GEMINI_API_KEY" in os.environ:
-            self.api_entry.insert(0, os.environ["GEMINI_API_KEY"])
+        env_key = os.environ.get("GEMINI_API_KEY", "")
+        self.api_entry.insert(0, env_key if env_key else default_key)
 
         tk.Label(self.ai_frame, text="Describe:", bg=BACKGROUND_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(15,2))
         self.desc_entry = tk.Entry(self.ai_frame, width=35)
@@ -155,7 +164,7 @@ class KarelUI:
             self.toolbar_frame.pack(fill=tk.X, expand=True)
         else:
             if generate_shape_code is None:
-                messagebox.showerror("Module Error", "AI Generator is missing dependencies. Please 'uv pip install google-genai'.")
+                self.status_lbl.config(text="Missing dependencies. Please 'uv pip install google-genai'.", fg="red")
                 return
                 
             # Enter: Generate!
@@ -219,7 +228,6 @@ class KarelUI:
             self.set_shape(desc)
         else:
             self.status_lbl.config(text=message, fg="red")
-            messagebox.showerror("Generation Error", message)
 
     def draw_grid(self, width, height, cell_size):
         """Draws the grid lines."""

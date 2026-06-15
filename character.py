@@ -83,104 +83,48 @@ def draw_classic_karel(canvas, cx, cy, cell_size, direction, color_hex):
     bottom_foot_screen = [coord for pt in bottom_foot_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
     canvas.create_line(bottom_foot_screen, fill=OUTLINE_COLOR, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
 
-def draw_arrow(canvas, cx, cy, cell_size, direction, color_hex):
-    """
-    Draws a simple arrow shape.
-    """
-    line_width = max(2, int(cell_size * 0.06))
-    
-    # Arrow points East (Right)
-    arrow_pts = [(-0.2, -0.15), (0.1, -0.15), (0.1, -0.3), (0.4, 0), (0.1, 0.3), (0.1, 0.15), (-0.2, 0.15)]
-    arrow_rot = [rotate_point(x, y, direction) for x, y in arrow_pts]
-    arrow_screen = [coord for pt in arrow_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-    canvas.create_polygon(arrow_screen, fill=color_hex, outline=OUTLINE_COLOR, width=line_width)
-
-def draw_christmas_tree(canvas, cx, cy, cell_size, direction, color_hex):
-    """
-    Draws a Christmas tree shape.
-    """
-    line_width = max(2, int(cell_size * 0.06))
-    
-    # Tree "points" East (top of tree faces Right)
-    # Trunk
-    trunk_pts = [(-0.4, -0.1), (-0.2, -0.1), (-0.2, 0.1), (-0.4, 0.1)]
-    trunk_rot = [rotate_point(x, y, direction) for x, y in trunk_pts]
-    trunk_screen = [coord for pt in trunk_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-    canvas.create_polygon(trunk_screen, fill="#8B4513", outline=OUTLINE_COLOR, width=line_width)
-    
-    # Leaves (3 triangles)
-    leaves_pts = [
-        # Bottom tier
-        (-0.2, -0.4), (0.1, 0), (-0.2, 0.4),
-        # Middle tier
-        (0.0, -0.3), (0.25, 0), (0.0, 0.3),
-        # Top tier
-        (0.15, -0.2), (0.4, 0), (0.15, 0.2)
-    ]
-    
-    # Draw them in pieces so we can layer them
-    tiers = [
-        [(-0.2, -0.4), (0.1, 0), (-0.2, 0.4)],
-        [(0.0, -0.3), (0.25, 0), (0.0, 0.3)],
-        [(0.15, -0.2), (0.4, 0), (0.15, 0.2)]
-    ]
-    
-    for tier in tiers:
-        tier_rot = [rotate_point(x, y, direction) for x, y in tier]
-        tier_screen = [coord for pt in tier_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-        canvas.create_polygon(tier_screen, fill=color_hex, outline=OUTLINE_COLOR, width=line_width)
-
-def draw_stick_man(canvas, cx, cy, cell_size, direction, color_hex):
-    """
-    Draws a stick man facing forward.
-    """
-    line_width = max(2, int(cell_size * 0.06))
-    
-    # Head
-    # Let's draw a circle. Circles don't rotate easily with our rotate_point,
-    # so we will make a small polygon for the head.
-    # Stick man points East (faces Right).
-    # Center of head is at x=0.2, y=0.
-    head_pts = [(0.1, -0.1), (0.3, -0.1), (0.3, 0.1), (0.1, 0.1)]
-    head_rot = [rotate_point(x, y, direction) for x, y in head_pts]
-    head_screen = [coord for pt in head_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-    canvas.create_polygon(head_screen, fill=color_hex, outline=OUTLINE_COLOR, width=line_width)
-    
-    # Body (line from x=-0.1 to x=0.1)
-    body_pts = [(-0.1, 0), (0.1, 0)]
-    body_rot = [rotate_point(x, y, direction) for x, y in body_pts]
-    body_screen = [coord for pt in body_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-    canvas.create_line(body_screen, fill=OUTLINE_COLOR, width=line_width)
-    
-    # Arms
-    arms_pts = [(0, -0.2), (0, 0.2)]
-    arms_rot = [rotate_point(x, y, direction) for x, y in arms_pts]
-    arms_screen = [coord for pt in arms_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-    canvas.create_line(arms_screen, fill=OUTLINE_COLOR, width=line_width)
-    
-    # Legs
-    leg1_pts = [(-0.1, 0), (-0.3, -0.15)]
-    leg2_pts = [(-0.1, 0), (-0.3, 0.15)]
-    for leg in [leg1_pts, leg2_pts]:
-        leg_rot = [rotate_point(x, y, direction) for x, y in leg]
-        leg_screen = [coord for pt in leg_rot for coord in (cx + pt[0]*cell_size, cy + pt[1]*cell_size)]
-        canvas.create_line(leg_screen, fill=OUTLINE_COLOR, width=line_width)
-
-# A master list of available characters so the UI can cycle through them!
-AVAILABLE_CHARACTERS = ["Classic Karel", "Arrow", "Christmas Tree", "Stick Man", "Generate with AI..."]
+import os
 
 # A dictionary to hold custom AI generated characters mapping: character_name -> function
 CUSTOM_CHARACTERS = {}
+
+# A master list of available characters so the UI can cycle through them!
+AVAILABLE_CHARACTERS = ["Classic Karel"]
+
+def load_characters_from_folder():
+    characters_dir = "characters"
+    if not os.path.exists(characters_dir):
+        return
+        
+    for filename in os.listdir(characters_dir):
+        if filename.endswith(".py"):
+            filepath = os.path.join(characters_dir, filename)
+            with open(filepath, "r") as f:
+                code = f.read()
+                
+            local_scope = {"rotate_point": rotate_point, "tk": tk, "OUTLINE_COLOR": OUTLINE_COLOR}
+            try:
+                exec(code, globals(), local_scope)
+                if "draw_custom_character" in local_scope:
+                    # Nice formatting for the name (e.g. stick_man.py -> Stick Man)
+                    shape_name = filename[:-3].replace("_", " ").title()
+                    
+                    CUSTOM_CHARACTERS[shape_name] = local_scope["draw_custom_character"]
+                    if shape_name not in AVAILABLE_CHARACTERS:
+                        AVAILABLE_CHARACTERS.append(shape_name)
+            except Exception as e:
+                print(f"Failed to load character {filename}: {e}")
+
+# Load all characters dynamically
+load_characters_from_folder()
+
+# Add Generate with AI at the very end
+AVAILABLE_CHARACTERS.append("Generate with AI...")
 
 def draw_character_by_name(canvas, cx, cy, cell_size, direction, color_hex, character_name):
     """A helper function to draw the correct character based on its name."""
     if character_name in CUSTOM_CHARACTERS:
         CUSTOM_CHARACTERS[character_name](canvas, cx, cy, cell_size, direction, color_hex)
-    elif character_name == "Arrow":
-        draw_arrow(canvas, cx, cy, cell_size, direction, color_hex)
-    elif character_name == "Christmas Tree":
-        draw_christmas_tree(canvas, cx, cy, cell_size, direction, color_hex)
-    elif character_name == "Stick Man":
-        draw_stick_man(canvas, cx, cy, cell_size, direction, color_hex)
     else:
+        # Default fallback
         draw_classic_karel(canvas, cx, cy, cell_size, direction, color_hex)
