@@ -19,7 +19,7 @@ This is a grid-based puzzle and simulation game.
 - **Right Click**: Delete a character.
 - **Scroll Wheel**: Zoom in or out to make the grid larger or smaller.
 - **Play Button**: Start the animation!
-- **Speed Button**: When the animation is playing, a tiny button appears on the top-left-most cell of any valid loop. Click it to cycle the speed (▶ Slow, ▶▶ Fast, ⚡ Super Fast).
+- **Speed Button**: When the animation is playing, a tiny button appears on the top-left-most cell of any valid loop. Click it to cycle the speed (> Slow, >> Fast, >>> Super Fast).
 
 ## Code Structure
 
