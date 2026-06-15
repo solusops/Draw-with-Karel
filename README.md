@@ -20,6 +20,7 @@ This is a grid-based puzzle and simulation game.
 - **Scroll Wheel**: Zoom in or out to make the grid larger or smaller.
 - **Play Button**: Start the animation!
 - **Speed Button**: When the animation is playing, a tiny button appears on the top-left-most cell of any valid loop. Click it to cycle the speed (> Slow, >> Fast, >>> Super Fast).
+- **Export / Import**: Use the 💾 and 📂 buttons to instantly save and load your board configurations to `config.json`.
 
 ## Code Structure
 
@@ -27,11 +28,12 @@ This project is broken into several small Python files. This makes it easy for k
 
 1. **`main.py`**: The entry point. It sets up the window and binds your mouse clicks to code functions.
 2. **`ui.py`**: Draws the grid, the bottom dashboard, buttons, and the characters.
-3. **`character.py`**: Contains the math to draw the classic Karel shape, arrows, trees, and stick men.
-4. **`path_finding.py`**: Contains the logic to figure out if the characters form a loop. It uses very basic `for` and `while` loops!
-5. **`animation.py`**: Handles the smooth sliding math when you press Play.
-6. **`world.py`**: Keeps track of where all the characters are stored in memory.
-7. **`colors.py`**: A simple file to store HEX codes for the colors.
+3. **`character.py`**: Contains the math to draw the classic Karel shape and dynamically loads custom plugins.
+4. **`characters/` folder**: A folder full of Python files! Any Python script defining a `draw_custom_character` function in here is automatically loaded into the game!
+5. **`path_finding.py`**: Contains the logic to figure out if the characters form a loop. It uses very basic `for` and `while` loops!
+6. **`animation.py`**: Handles the smooth sliding math when you press Play.
+7. **`world.py`**: Keeps track of where all the characters are stored in memory.
+8. **`colors.py`**: A simple file to store HEX codes for the colors.
 
 ---
 
@@ -51,11 +53,11 @@ Here are some fun challenges you can try:
 4. Run the game and make a loop to see your new highlight!
 
 ### Challenge 3: Draw Your Own Character!
-1. Open `character.py`.
-2. Look at the `draw_arrow` function to see how we use `canvas.create_polygon`.
-3. Create your own function (e.g., `draw_star`) and add some coordinates.
-4. Add your character's name to the `AVAILABLE_CHARACTERS` list at the bottom of the file.
-5. In the `draw_character_by_name` function, add an `elif` statement to call your new drawing function.
+1. Open the `characters/` folder and create a new Python file, for example, `my_star.py`.
+2. Look at `characters/arrow.py` to see how we define the `draw_custom_character` function.
+3. Add your own `canvas.create_polygon` math to draw your shape.
+4. Run the game (`python main.py`). The game will automatically detect your new file and add "My Star" to the dropdown menu!
+5. **Bonus**: Try using the "Generate with AI..." button in the app to have an AI build the Python file for you!
 
 ### Challenge 4: Change the Rules of the World
 1. Open `path_finding.py`.
