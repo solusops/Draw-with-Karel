@@ -89,7 +89,7 @@ class KarelDrawingApp:
         self.title_lbl = tk.Label(self.sidebar, text="Draw with Karel", font=("Segoe UI", 18, "bold"), bg="#F3F4F6", fg="#1F2937")
         self.title_lbl.pack(anchor=tk.W, padx=15, pady=(15, 2))
         
-        self.subtitle_lbl = tk.Label(self.sidebar, text="Pixel-by-pixel robot drawer", font=("Segoe UI", 9, "italic"), bg="#F3F4F6", fg="#4B5563")
+        self.subtitle_lbl = tk.Label(self.sidebar, text="Code-In-Place 2026 Final Project", font=("Segoe UI", 9, "italic"), bg="#F3F4F6", fg="#4B5563")
         self.subtitle_lbl.pack(anchor=tk.W, padx=15, pady=(0, 15))
         
         # Grid settings & Stats Frame
@@ -268,35 +268,17 @@ class KarelDrawingApp:
         
         screen_fill = "#FFFFFF"
             
-        # Body: Classic beveled card shape
-        body_pts = [(-0.25, -0.35), (0.1, -0.35), (0.25, -0.2), (0.25, 0.35), (-0.1, 0.35), (-0.25, 0.2)]
+        # Main robot body
+        body_pts = [(-0.3, -0.3), (0.3, -0.3), (0.3, 0.3), (-0.3, 0.3)]
         body_rot = [self.rotate_point(x, y, direction) for x, y in body_pts]
         body_screen = [coord for pt in body_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
         self.canvas.create_polygon(body_screen, fill=color_hex, outline=outline_color, width=line_width)
         
-        # Screen
-        screen_pts = [(-0.12, -0.22), (0.12, -0.22), (0.12, 0.08), (-0.12, 0.08)]
-        screen_rot = [self.rotate_point(x, y, direction) for x, y in screen_pts]
-        screen_screen = [coord for pt in screen_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_polygon(screen_screen, fill=screen_fill, outline=outline_color, width=max(1, line_width // 2))
-        
-        # Mouth
-        mouth_pts = [(-0.06, 0.18), (0.06, 0.18)]
-        mouth_rot = [self.rotate_point(x, y, direction) for x, y in mouth_pts]
-        mouth_screen = [coord for pt in mouth_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_line(mouth_screen[0], mouth_screen[1], mouth_screen[2], mouth_screen[3], fill=outline_color, width=max(1.5, line_width // 2))
-        
-        # Left foot
-        left_foot_pts = [(-0.25, 0.08), (-0.35, 0.08), (-0.35, 0.18)]
-        left_foot_rot = [self.rotate_point(x, y, direction) for x, y in left_foot_pts]
-        left_foot_screen = [coord for pt in left_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_line(left_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
-        
-        # Bottom foot
-        bottom_foot_pts = [(0.08, 0.35), (0.08, 0.45), (0.18, 0.45)]
-        bottom_foot_rot = [self.rotate_point(x, y, direction) for x, y in bottom_foot_pts]
-        bottom_foot_screen = [coord for pt in bottom_foot_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
-        self.canvas.create_line(bottom_foot_screen, fill=outline_color, width=line_width, capstyle=tk.PROJECTING, joinstyle=tk.MITER)
+        # Huge white arrow pointing forward (East = Right)
+        arrow_pts = [(-0.15, -0.2), (0.25, 0), (-0.15, 0.2), (-0.05, 0)]
+        arrow_rot = [self.rotate_point(x, y, direction) for x, y in arrow_pts]
+        arrow_screen = [coord for pt in arrow_rot for coord in (cx + pt[0]*S, cy + pt[1]*S)]
+        self.canvas.create_polygon(arrow_screen, fill="#FFFFFF", outline=outline_color, width=line_width)
 
     # --- Mouse Event Handlers ---
     def get_cell_coords(self, click_x, click_y):
@@ -465,7 +447,15 @@ class KarelDrawingApp:
                 col, row = curr
                 data = self.karels[curr]
                 dx, dy = self.get_dir_delta(data["direction"])
-                curr = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
+                nxt_col, nxt_row = col + dx, row + dy
+                
+                # If it goes out of bounds, the path ends (no wrapping)
+                if not (0 <= nxt_col < self.logical_grid_size and 0 <= nxt_row < self.logical_grid_size):
+                    for node in path:
+                        visited_global.add(node)
+                    break
+                    
+                curr = (nxt_col, nxt_row)
                 
             for node in path:
                 visited_global.add(node)
@@ -492,7 +482,7 @@ class KarelDrawingApp:
                 col, row = pos
                 direction = data["direction"]
                 dx, dy = self.get_dir_delta(direction)
-                front_pos = ((col + dx) % self.logical_grid_size, (row + dy) % self.logical_grid_size)
+                front_pos = (col + dx, row + dy)
                 
                 if front_pos in moving:
                     front_data = self.karels[front_pos]
