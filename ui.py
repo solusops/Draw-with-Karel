@@ -218,7 +218,7 @@ class KarelUI:
                 
     def draw_karels(self, cell_size, node_to_head, cycle_heads):
         """Draws all the Karels, including the smooth sliding animation."""
-        from shapes import get_dir_delta
+        from character import get_dir_delta
         
         for pos, data in self.world.karels.items():
             col, row = pos

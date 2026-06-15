@@ -6,17 +6,17 @@ This project has been modularized so that new programmers can easily read, under
 ## How the World Works
 
 This is a grid-based puzzle and simulation game.
-- You place "Karels" (or other shapes) on the grid.
-- Each shape has a direction it is facing.
-- If you arrange the shapes so they point to each other in a closed loop (or a "chain" that leads into a loop), you can press **Play** to watch them physically slide around the track!
+- You place "Karels" (or other characters) on the grid.
+- Each character has a direction it is facing.
+- If you arrange the characters so they point to each other in a closed loop (or a "chain" that leads into a loop), you can press **Play** to watch them physically slide around the track!
 - The game uses "Pac-Man" wrapping, meaning if a shape points off the right edge of the board, it connects to the left edge.
 
 ## Controls
 
-- **Left Click**: Place a shape on the board.
-- **Left Click (on existing shape)**: Rotate the shape 90 degrees clockwise.
-- **Left Click & Drag**: Draw multiple shapes quickly.
-- **Right Click**: Delete a shape.
+- **Left Click**: Place a character on the board.
+- **Left Click (on existing character)**: Rotate the character 90 degrees clockwise.
+- **Left Click & Drag**: Draw multiple characters quickly.
+- **Right Click**: Delete a character.
 - **Scroll Wheel**: Zoom in or out to make the grid larger or smaller.
 - **Play Button**: Start the animation!
 - **Speed Button**: When the animation is playing, a tiny button appears on the top-left-most cell of any valid loop. Click it to cycle the speed (▶ Slow, ▶▶ Fast, ⚡ Super Fast).
@@ -26,11 +26,11 @@ This is a grid-based puzzle and simulation game.
 This project is broken into several small Python files. This makes it easy for kids and beginners to learn how different parts of a program talk to each other:
 
 1. **`main.py`**: The entry point. It sets up the window and binds your mouse clicks to code functions.
-2. **`ui.py`**: Draws the grid, the bottom dashboard, buttons, and the shapes.
-3. **`shapes.py`**: Contains the math to draw the classic Karel shape, arrows, trees, and stick men.
-4. **`path_finding.py`**: Contains the logic to figure out if the shapes form a loop. It uses very basic `for` and `while` loops!
+2. **`ui.py`**: Draws the grid, the bottom dashboard, buttons, and the characters.
+3. **`character.py`**: Contains the math to draw the classic Karel shape, arrows, trees, and stick men.
+4. **`path_finding.py`**: Contains the logic to figure out if the characters form a loop. It uses very basic `for` and `while` loops!
 5. **`animation.py`**: Handles the smooth sliding math when you press Play.
-6. **`world.py`**: Keeps track of where all the shapes are stored in memory.
+6. **`world.py`**: Keeps track of where all the characters are stored in memory.
 7. **`colors.py`**: A simple file to store HEX codes for the colors.
 
 ---
@@ -50,12 +50,12 @@ Here are some fun challenges you can try:
 3. Change the HEX code to a light blue like `"#BAE6FD"`.
 4. Run the game and make a loop to see your new highlight!
 
-### Challenge 3: Draw Your Own Shape!
-1. Open `shapes.py`.
+### Challenge 3: Draw Your Own Character!
+1. Open `character.py`.
 2. Look at the `draw_arrow` function to see how we use `canvas.create_polygon`.
 3. Create your own function (e.g., `draw_star`) and add some coordinates.
-4. Add your shape's name to the `AVAILABLE_SHAPES` list at the bottom of the file.
-5. In the `draw_shape_by_name` function, add an `elif` statement to call your new drawing function.
+4. Add your character's name to the `AVAILABLE_CHARACTERS` list at the bottom of the file.
+5. In the `draw_character_by_name` function, add an `elif` statement to call your new drawing function.
 
 ### Challenge 4: Change the Rules of the World
 1. Open `path_finding.py`.
