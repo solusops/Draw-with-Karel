@@ -83,6 +83,12 @@ class KarelUI:
                                    bg="#EF4444", fg="white")
         self.btn_clear.pack(side=tk.LEFT, padx=5)
         
+        self.btn_export = tk.Button(actions_frame, text="💾 Export", font=("Arial", 10, "bold"), bg="#3B82F6", fg="white")
+        self.btn_export.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_import = tk.Button(actions_frame, text="📂 Import", font=("Arial", 10, "bold"), bg="#8B5CF6", fg="white")
+        self.btn_import.pack(side=tk.LEFT, padx=5)
+        
         self.btn_play = tk.Button(actions_frame, text="Play", font=("Arial", 10, "bold"),
                                   bg="#10B981", fg="white", width=8)
         self.btn_play.pack(side=tk.LEFT, padx=5)

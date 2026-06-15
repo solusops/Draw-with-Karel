@@ -3,6 +3,8 @@
 # This is the main file that runs the entire program.
 
 import tkinter as tk
+import json
+import os
 from world import World
 from animation import AnimationState, advance_simulation, toggle_loop_speed
 from ui import KarelUI
@@ -46,6 +48,8 @@ class KarelApp:
         # Buttons
         self.ui.btn_clear.config(command=self.clear_board)
         self.ui.btn_play.config(command=self.toggle_play)
+        self.ui.btn_export.config(command=self.export_config)
+        self.ui.btn_import.config(command=self.import_config)
 
     def get_cell_from_click(self, event):
         """Helper to convert a mouse click into grid coordinates (col, row)."""
@@ -134,6 +138,39 @@ class KarelApp:
         self.anim_state = AnimationState()
         self.ui.btn_play.config(text="Play", bg="#10B981")
         self.update_canvas()
+
+    def export_config(self):
+        """Saves the current board to config.json"""
+        data = {
+            "grid_size": self.world.grid_size,
+            "karels": {f"{c},{r}": v for (c, r), v in self.world.karels.items()}
+        }
+        with open("config.json", "w") as f:
+            json.dump(data, f, indent=4)
+        print("Config exported successfully to config.json")
+
+    def import_config(self):
+        """Loads the board from config.json"""
+        if not os.path.exists("config.json"):
+            print("config.json not found!")
+            return
+            
+        try:
+            with open("config.json", "r") as f:
+                data = json.load(f)
+            
+            self.clear_board()
+            self.world.grid_size = data.get("grid_size", 3)
+            self.world.logical_grid_size = self.world.grid_size
+            
+            for k_str, v in data.get("karels", {}).items():
+                c, r = map(int, k_str.split(","))
+                self.world.karels[(c, r)] = v
+                
+            self.update_canvas()
+            print("Config imported successfully from config.json")
+        except Exception as e:
+            print(f"Failed to import config: {e}")
 
     def toggle_play(self):
         """Starts or stops the animation."""
