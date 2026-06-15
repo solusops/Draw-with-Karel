@@ -152,7 +152,7 @@ class KarelUI:
             y0 = head[1] * cell_size
             
             speed = self.anim_state.loop_speeds.get(head, 0)
-            text = "▶" if speed == 0 else "▶▶" if speed == 1 else "⚡"
+            text = ">" if speed == 0 else ">>" if speed == 1 else "!"
             
             # Draw a tiny box with text inside
             self.canvas.create_rectangle(x0 + 2, y0 + 2, x0 + 25, y0 + 25, fill="white", outline="black")
